@@ -1,0 +1,248 @@
+  // This is your Prisma schema file,
+  // learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+  // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+  // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+  generator client {
+    provider = "prisma-client-js"
+    output   = "../generated/prisma"
+  }
+
+  datasource db {
+    provider = "postgresql"
+  }
+
+  //////////////////////////////////////////////////////
+  // USERS
+  //////////////////////////////////////////////////////
+
+  model User {
+    id          String   @id @default(uuid())
+    name        String
+    email       String   @unique
+    password    String
+    role        UserRole @default(USER)
+    isActive    Boolean  @default(true)
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+
+    businessesOwned Business[]     @relation("BusinessOwner")
+    memberships     BusinessUser[]
+
+    @@map("users")
+  }
+
+  enum UserRole {
+    USER
+    ADMIN
+    SUPER_ADMIN
+  }
+
+  //////////////////////////////////////////////////////
+  // BUSINESSES (TENANTS)
+  //////////////////////////////////////////////////////
+
+  model Business {
+    id          String   @id @default(uuid())
+    name        String
+    ownerId     String
+    isActive    Boolean  @default(true)
+    createdAt   DateTime @default(now())
+
+    owner        User            @relation("BusinessOwner", fields: [ownerId], references: [id])
+    users        BusinessUser[]
+    roles        Role[]
+    customers    Customer[]
+    invoices     Invoice[]
+    subscription Subscription?
+
+    @@map("businesses")
+  }
+
+  //////////////////////////////////////////////////////
+  // BUSINESS USERS (User ↔ Business)
+  //////////////////////////////////////////////////////
+
+  model BusinessUser {
+    id          String   @id @default(uuid())
+    userId      String
+    businessId  String
+    roleId      String
+    isActive    Boolean  @default(true)
+    createdAt   DateTime @default(now())
+
+    user            User             @relation(fields: [userId], references: [id])
+    business        Business         @relation(fields: [businessId], references: [id])
+    role            Role             @relation(fields: [roleId], references: [id])
+    userPermissions UserPermission[]
+
+    @@unique([userId, businessId]) // prevents duplicate membership
+    @@index([businessId])
+    @@map("business_users")
+  }
+
+  //////////////////////////////////////////////////////
+  // ROLES (Business Scoped)
+  //////////////////////////////////////////////////////
+
+  model Role {
+    id          String   @id @default(uuid())
+    name        String
+    businessId  String
+    createdAt   DateTime @default(now())
+
+    business        Business         @relation(fields: [businessId], references: [id])
+    users           BusinessUser[]
+    rolePermissions RolePermission[]
+
+    @@unique([businessId, name]) // prevents duplicate roles inside a business
+    @@map("roles")
+  }
+
+  //////////////////////////////////////////////////////
+  // PERMISSIONS (GLOBAL)
+  //////////////////////////////////////////////////////
+
+  model Permission {
+    id        String @id @default(uuid())
+    module    String // "invoice"
+    action    String // "create", "read", "update", "delete"
+
+    rolePermissions RolePermission[]
+    userPermissions UserPermission[]
+
+    @@unique([module, action]) // prevents duplicates
+    @@map("permissions")
+  }
+
+  //////////////////////////////////////////////////////
+  // ROLE -> PERMISSION
+  //////////////////////////////////////////////////////
+
+  model RolePermission {
+    id            String @id @default(uuid())
+    roleId        String
+    permissionId  String
+
+    role        Role       @relation(fields: [roleId], references: [id])
+    permission  Permission @relation(fields: [permissionId], references: [id])
+
+    @@unique([roleId, permissionId])
+    @@map("role_permissions")
+  }
+
+  //////////////////////////////////////////////////////
+  // USER -> DIRECT PERMISSION (Overrides)
+  //////////////////////////////////////////////////////
+
+  model UserPermission {
+    id              String @id @default(uuid())
+    businessUserId  String
+    permissionId    String
+
+    businessUser BusinessUser @relation(fields: [businessUserId], references: [id])
+    permission   Permission   @relation(fields: [permissionId], references: [id])
+
+    @@unique([businessUserId, permissionId])
+    @@map("user_permissions")
+  }
+
+  //////////////////////////////////////////////////////
+  // CUSTOMERS
+  //////////////////////////////////////////////////////
+
+  model Customer {
+    id          String   @id @default(uuid())
+    businessId  String
+    name        String
+    email       String?
+    phone       String?
+    address     String?
+    createdAt   DateTime @default(now())
+
+    business Business @relation(fields: [businessId], references: [id])
+    invoices Invoice[]
+
+    @@index([businessId]) // critical for tenant performance
+    @@map("customers")
+  }
+
+  //////////////////////////////////////////////////////
+  // INVOICES
+  //////////////////////////////////////////////////////
+
+  model Invoice {
+    id            String        @id @default(uuid())
+    businessId    String
+    customerId    String
+    invoiceNumber String
+    status        InvoiceStatus @default(DRAFT)
+    totalAmount   Decimal       @db.Decimal(12, 2)
+    issuedDate    DateTime
+    dueDate       DateTime
+    createdAt     DateTime      @default(now())
+
+    business Business @relation(fields: [businessId], references: [id])
+    customer Customer @relation(fields: [customerId], references: [id])
+    items    InvoiceItem[]
+
+    @@unique([businessId, invoiceNumber]) // invoice numbers unique per business
+    @@index([businessId])
+    @@map("invoices")
+  }
+
+  //////////////////////////////////////////////////////
+  // INVOICE ITEMS
+  //////////////////////////////////////////////////////
+
+  model InvoiceItem {
+    id          String  @id @default(uuid())
+    invoiceId   String
+    description String
+    quantity    Int
+    price       Decimal @db.Decimal(12, 2)
+
+    invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+    @@map("invoice_items")
+  }
+
+  //////////////////////////////////////////////////////
+  // SUBSCRIPTIONS (Manual Billing Ready)
+  //////////////////////////////////////////////////////
+
+  model Subscription {
+    id          String   @id @default(uuid())
+    businessId  String   @unique
+    status      SubscriptionStatus @default(INACTIVE)
+
+    startDate   DateTime?
+    expiresAt   DateTime?
+
+    planName    String? // "Starter", "Premium", etc.
+    notes       String? // for manual deals
+
+    createdAt   DateTime @default(now())
+
+    business Business @relation(fields: [businessId], references: [id])
+
+    @@map("subscriptions")
+  }
+
+  enum SubscriptionStatus {
+    INACTIVE
+    ACTIVE
+    EXPIRED
+  }
+
+  //////////////////////////////////////////////////////
+  // INVOICE STATUS
+  //////////////////////////////////////////////////////
+
+  enum InvoiceStatus {
+    DRAFT
+    SENT
+    PAID
+    OVERDUE
+  }
