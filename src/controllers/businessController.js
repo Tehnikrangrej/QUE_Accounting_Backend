@@ -1,5 +1,5 @@
 const prisma = require("../config/prisma");
-const { generateToken } = require("../utils/jwtUtils");
+const {generateToken}  = require("../utils/jwtUtils");
 const { successResponse, errorResponse } = require("../utils/response");
 
 exports.createBusiness = async (req, res) => {
@@ -7,68 +7,58 @@ exports.createBusiness = async (req, res) => {
     const { name } = req.body;
     const userId = req.user.userId;
 
-    const business = await prisma.$transaction(async (tx) => {
-      const newBusiness = await tx.business.create({
-        data: {
-          name,
-          ownerId: userId,
-        },
-      });
+    // 1 create business
+    const business = await prisma.business.create({
+      data: {
+        name,
+        ownerId: userId,
+      },
+    });
 
-      await tx.subscription.create({
-        data: {
-          businessId: newBusiness.id,
-          status: "INACTIVE",
-        },
-      });
+    // 2 create subscription (always)
+    await prisma.subscription.create({
+      data: {
+        businessId: business.id,
+        status: "INACTIVE",
+      },
+    });
 
-      const adminRole = await tx.role.create({
-        data: {
-          name: "Admin",
-          businessId: newBusiness.id,
-        },
-      });
+    // 3 create admin role
+    const adminRole = await prisma.role.create({
+      data: {
+        name: "Admin",
+        businessId: business.id,
+      },
+    });
 
-      const permissions = await tx.permission.findMany();
+    // 4 assign permissions
+    const permissions = await prisma.permission.findMany();
 
-      for (let perm of permissions) {
-        await tx.rolePermission.create({
-          data: {
-            roleId: adminRole.id,
-            permissionId: perm.id,
-          },
-        });
-      }
-
-      await tx.businessUser.create({
-        data: {
-          userId,
-          businessId: newBusiness.id,
+    if (permissions.length > 0) {
+      await prisma.rolePermission.createMany({
+        data: permissions.map(p => ({
           roleId: adminRole.id,
-        },
+          permissionId: p.id,
+        })),
       });
+    }
 
-      return newBusiness;
+    // 5 add owner as business admin
+    await prisma.businessUser.create({
+      data: {
+        userId,
+        businessId: business.id,
+        roleId: adminRole.id,
+      },
     });
 
-    // Generate token with proper user data
-    const token = generateToken({
-      id: userId,
-      email: req.user.email,
-      role: req.user.role,
-      isActive: req.user.isActive,
-    });
+    return successResponse(res, business, "Business created", 201);
 
-    return successResponse(res, {
-      business,
-      token,
-    }, "Business created successfully", 201);
   } catch (error) {
-    console.error("Create business error:", error);
+    console.error(error);
     return errorResponse(res, error.message, 500);
   }
 };
-
 exports.switchBusiness = async (req, res) => {
   try {
     const { businessId } = req.body;
@@ -87,21 +77,23 @@ exports.switchBusiness = async (req, res) => {
       return errorResponse(res, "Not a member of this business", 403);
     }
 
-    // Generate token with active business context
     const token = generateToken({
-      id: userId,
-      email: req.user.email,
-      role: req.user.role,
-      isActive: req.user.isActive,
-      additionalClaims: {
+  userId: userId,   // ❗ not id
+  email: req.user.email,
+  role: req.user.role,
+  isActive: req.user.isActive,
+  activeBusinessId: businessId   // ❗ direct field
+});
+
+    return successResponse(
+      res,
+      {
+        token,
         activeBusinessId: businessId,
       },
-    });
+      "Business switched successfully"
+    );
 
-    return successResponse(res, {
-      token,
-      activeBusinessId: businessId,
-    }, "Business switched successfully");
   } catch (error) {
     console.error("Switch business error:", error);
     return errorResponse(res, error.message, 500);

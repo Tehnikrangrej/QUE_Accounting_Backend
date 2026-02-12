@@ -1,7 +1,7 @@
 const router = require("express").Router();
-const authMiddleware = require("../middlewares/authMiddleware").default || require("../middlewares/authMiddleware");
+const authMiddleware = require("../middlewares/authMiddleware");
 const businessController = require("../controllers/businessController");
 
-router.post("/", authMiddleware, businessController.createBusiness);
-router.post("/switch/:businessId", authMiddleware, businessController.switchBusiness);
+router.post("/create", authMiddleware, businessController.createBusiness);
+router.post("/switch", authMiddleware, businessController.switchBusiness);
 module.exports = router;

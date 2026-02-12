@@ -10,9 +10,11 @@ const checkPermission = (module, action) => {
         return errorResponse(res, "Membership context missing", 500);
       }
 
-      // 1. Check if user is Admin (Admin role usually has all permissions)
-      // In this system, we could either hardcode 'Admin' or check if the Admin role has all permissions.
-      // Let's check if the role name is 'Admin' for simplicity, or look up permissions.
+      // 1. Check if user is Admin
+      if (!membership.role) {
+        return errorResponse(res, "User role not found", 403);
+      }
+
       if (membership.role.name === "Admin") {
         return next();
       }

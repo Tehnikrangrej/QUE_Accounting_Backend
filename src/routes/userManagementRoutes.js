@@ -8,13 +8,13 @@ const {
 } = require("../controllers/userManagementController");
 const { getAllPermissions } = require("../controllers/permissionController");
 const authMiddleware = require("../middlewares/authMiddleware");
-const tenantMiddleware = require("../middlewares/tenantMiddleware");
+const businessMiddleware = require("../middlewares/business.middleware");
 const checkPermission = require("../middlewares/permissionMiddleware");
 
 const router = express.Router();
 
 router.use(authMiddleware);
-router.use(tenantMiddleware);
+router.use(businessMiddleware);
 
 // Only Admin can manage users and permissions
 router.get("/", checkPermission("user", "read"), getBusinessUsers);

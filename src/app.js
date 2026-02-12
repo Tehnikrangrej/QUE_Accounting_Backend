@@ -18,7 +18,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/business", businessRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/invoices", invoiceRoutes);
-app.use("/api/admin/subscriptions", subscriptionRoutes);
+app.use("/api/subscriptions", subscriptionRoutes);
 
 
 app.get("/", (req, res) => {
