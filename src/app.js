@@ -19,7 +19,7 @@ app.use("/api/business", businessRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/subscriptions", subscriptionRoutes);
-
+app.use("/api/user-management", require("./routes/userManagementRoutes"));
 
 app.get("/", (req, res) => {
   res.send("QUE Accounting Backend Running...");

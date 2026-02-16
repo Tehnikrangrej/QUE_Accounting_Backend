@@ -4,52 +4,80 @@ module.exports = async (req, res, next) => {
   try {
     const { userId, activeBusinessId } = req.user;
 
-    // ❌ user has not switched business
+    //////////////////////////////////////////////////////
+    // 1️⃣ User must have active business
+    //////////////////////////////////////////////////////
     if (!activeBusinessId) {
       return res.status(400).json({
-        message: "No active business selected. Please switch business."
+        success: false,
+        message: "No active business found",
       });
     }
 
-    // ✅ find membership for selected business
+    //////////////////////////////////////////////////////
+    // 2️⃣ Membership + business + subscription
+    //////////////////////////////////////////////////////
     const membership = await prisma.businessUser.findUnique({
       where: {
         userId_businessId: {
           userId,
           businessId: activeBusinessId,
-        }
+        },
       },
       include: {
+        role: true,
         business: {
           include: {
-            subscription: true
-          }
+            subscription: true,
+          },
         },
-        role: true // ✅ Needed for permissionMiddleware
-      }
+      },
     });
 
     if (!membership) {
-      return res.status(404).json({
-        message: "You are not member of this business"
+      return res.status(403).json({
+        success: false,
+        message: "You are not a member of this business",
       });
     }
 
-    // ✅ attach selected business
+    //////////////////////////////////////////////////////
+    // 3️⃣ BUSINESS MUST BE ACTIVE
+    //////////////////////////////////////////////////////
+    if (!membership.business.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "Business inactive. Waiting for subscription activation.",
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // 4️⃣ SUBSCRIPTION MUST BE ACTIVE
+    //////////////////////////////////////////////////////
+    if (
+      !membership.business.subscription ||
+      membership.business.subscription.status !== "ACTIVE"
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Subscription inactive",
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // 5️⃣ Attach for next middleware/controllers
+    //////////////////////////////////////////////////////
     req.business = membership.business;
     req.membership = membership;
-
-    console.log("===== BUSINESS DEBUG =====");
-    console.log("User:", req.user.userId);
-    console.log("Active Business ID:", activeBusinessId);
-    console.log("Loaded Business Name:", membership.business.name);
-    console.log("Subscription Status:", membership.business.subscription?.status);
-    console.log("==========================");
 
     next();
 
   } catch (error) {
     console.error("Business middleware error:", error);
-    res.status(500).json({ message: error.message });
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };

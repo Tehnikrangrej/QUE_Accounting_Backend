@@ -1,50 +1,101 @@
+const prisma = require("../config/prisma");
 const { verifyToken, extractTokenFromHeader } = require("../utils/jwtUtils");
 
-const authMiddleware = (req, res, next) => {
-  const token = extractTokenFromHeader(req);
+const authMiddleware = async (req, res, next) => {
+  try {
+    const token = extractTokenFromHeader(req);
 
-  if (!token) {
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const { success, payload, error } = verifyToken(token);
+
+    if (!success) {
+      return res.status(401).json({
+        success: false,
+        message: error?.message || "Invalid token",
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // REQUIRED PAYLOAD VALIDATION
+    //////////////////////////////////////////////////////
+    if (!payload.userId || !payload.email || !payload.role) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid token payload",
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // ⭐ SUBSCRIPTION ADMIN (ENV LOGIN)
+    // NO DATABASE LOOKUP
+    //////////////////////////////////////////////////////
+    if (payload.userId === "subscription-admin") {
+      req.user = {
+        userId: payload.userId,
+        email: payload.email,
+        role: payload.role,
+        isActive: true,
+        activeBusinessId: null,
+      };
+
+      return next();
+    }
+
+    //////////////////////////////////////////////////////
+    // NORMAL USERS → LOAD FROM DATABASE
+    //////////////////////////////////////////////////////
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        isActive: true,
+        activeBusinessId: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "Account is inactive",
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // FINAL USER OBJECT
+    //////////////////////////////////////////////////////
+    req.user = {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive,
+      activeBusinessId: user.activeBusinessId || null,
+    };
+
+    next();
+
+  } catch (err) {
+    console.error("Auth middleware error:", err);
+
     return res.status(401).json({
       success: false,
-      message: "Authentication required",
+      message: "Authentication failed",
     });
   }
-
-  const { success, payload, error } = verifyToken(token);
-
-  if (!success) {
-    return res.status(401).json({
-      success: false,
-      message: error?.message || "Invalid token",
-    });
-  }
-
-  //////////////////////////////////////////////////////
-  // REQUIRED PAYLOAD VALIDATION
-  //////////////////////////////////////////////////////
-  if (!payload.userId || !payload.email || !payload.role) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid token payload. Missing required fields.",
-    });
-  }
-
-  if (payload.isActive === false) {
-    return res.status(403).json({
-      success: false,
-      message: "Account is inactive",
-    });
-  }
-
-  req.user = {
-    userId: payload.userId,
-    email: payload.email,
-    role: payload.role,
-    isActive: payload.isActive,
-    activeBusinessId: payload.activeBusinessId || null, // Ensure this field is always present 
-  };
-
-  next();
 };
 
 module.exports = authMiddleware;

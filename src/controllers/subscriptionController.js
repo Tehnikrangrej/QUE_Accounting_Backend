@@ -32,15 +32,28 @@ exports.activateSubscription = async (req, res) => {
     if (!businessId)
       return errorResponse(res, "businessId required", 400);
 
+    //////////////////////////////////////////////////////
+    // 1️⃣ ACTIVATE SUBSCRIPTION
+    //////////////////////////////////////////////////////
     const subscription = await prisma.subscription.update({
       where: { businessId },
       data: {
         status: "ACTIVE",
         startDate: new Date(),
-        expiresAt: new Date(Date.now() + durationMonths * 30 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(
+          Date.now() + durationMonths * 30 * 24 * 60 * 60 * 1000
+        ),
         planName,
         notes,
       },
+    });
+
+    //////////////////////////////////////////////////////
+    // ⭐ 2️⃣ ACTIVATE BUSINESS (MISSING PART)
+    //////////////////////////////////////////////////////
+    await prisma.business.update({
+      where: { id: businessId },
+      data: { isActive: true },
     });
 
     return successResponse(res, subscription, "Subscription activated");

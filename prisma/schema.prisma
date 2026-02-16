@@ -23,6 +23,8 @@
     email       String   @unique
     password    String
     role        UserRole @default(USER)
+    activeBusinessId String? // for quick access to current tenant context
+     activeBusiness   Business? @relation("ActiveBusiness", fields: [activeBusinessId], references: [id])
     isActive    Boolean  @default(true)
     createdAt   DateTime @default(now())
     updatedAt   DateTime @updatedAt
@@ -56,9 +58,10 @@
     customers    Customer[]
     invoices     Invoice[]
     subscription Subscription?
+     activeUsers  User[]          @relation("ActiveBusiness") 
 
     @@map("businesses")
-  }
+}
 
   //////////////////////////////////////////////////////
   // BUSINESS USERS (User ↔ Business)

@@ -21,8 +21,8 @@ exports.register = async (req, res) => {
         name,
         email,
         password: hashed,
-        role: "USER",      // IMPORTANT
-        isActive: true,    // IMPORTANT
+        role: "USER",
+        isActive: true,
       },
     });
 
@@ -41,7 +41,7 @@ exports.login = async (req, res) => {
     const { email, password } = req.body;
 
     //////////////////////////////////////////////////////
-    // SUBSCRIPTION ADMIN LOGIN
+    // ⭐ SUBSCRIPTION ADMIN LOGIN (ENV BASED)
     //////////////////////////////////////////////////////
     if (
       email === process.env.SUBSCRIPTION_ADMIN_EMAIL &&
@@ -50,12 +50,16 @@ exports.login = async (req, res) => {
       const token = generateToken({
         userId: "subscription-admin",
         email,
-        role: "SUBSCRIPTION_ADMIN",
+        role: "SUPER_ADMIN", // ✅ IMPORTANT FIX
         isActive: true,
-        activeBusinessId: null,
+        isSubscriptionAdmin: true, // ✅ special flag
       });
 
-      return res.json({ success: true, token, businesses: [] });
+      return res.json({
+        success: true,
+        token,
+        businesses: [],
+      });
     }
 
     //////////////////////////////////////////////////////
@@ -66,18 +70,20 @@ exports.login = async (req, res) => {
       include: { memberships: true },
     });
 
-    if (!user) return res.status(400).json({ message: "Invalid credentials" });
+    if (!user)
+      return res.status(400).json({ message: "Invalid credentials" });
 
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(400).json({ message: "Invalid credentials" });
 
-   const token = generateToken({
-  userId: user.id,
-  email: user.email,
-  role: user.role || "USER",   // REQUIRED
-  isActive: user.isActive ?? true, // REQUIRED
-  activeBusinessId: null,
-});
+    if (!match)
+      return res.status(400).json({ message: "Invalid credentials" });
+
+    const token = generateToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role || "USER",
+      isActive: user.isActive ?? true,
+    });
 
     res.json({
       success: true,

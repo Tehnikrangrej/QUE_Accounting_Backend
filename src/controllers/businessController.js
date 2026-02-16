@@ -1,21 +1,28 @@
 const prisma = require("../config/prisma");
-const {generateToken}  = require("../utils/jwtUtils");
 const { successResponse, errorResponse } = require("../utils/response");
 
+//////////////////////////////////////////////////////
+// CREATE BUSINESS
+//////////////////////////////////////////////////////
 exports.createBusiness = async (req, res) => {
   try {
     const { name } = req.body;
     const userId = req.user.userId;
 
-    // 1 create business
+    //////////////////////////////////////////////////////
+    // 1️⃣ CREATE BUSINESS (INACTIVE BY DEFAULT)
+    //////////////////////////////////////////////////////
     const business = await prisma.business.create({
       data: {
         name,
         ownerId: userId,
+        isActive: false, // ❗ only subscription admin activates
       },
     });
 
-    // 2 create subscription (always)
+    //////////////////////////////////////////////////////
+    // 2️⃣ CREATE SUBSCRIPTION (INACTIVE)
+    //////////////////////////////////////////////////////
     await prisma.subscription.create({
       data: {
         businessId: business.id,
@@ -23,7 +30,11 @@ exports.createBusiness = async (req, res) => {
       },
     });
 
-    // 3 create admin role
+   //////////////////////////////////////////////////////
+    // 3️⃣ CREATE ROLES
+    //////////////////////////////////////////////////////
+
+    // Admin role
     const adminRole = await prisma.role.create({
       data: {
         name: "Admin",
@@ -31,19 +42,31 @@ exports.createBusiness = async (req, res) => {
       },
     });
 
-    // 4 assign permissions
+    // ⭐ Default User role (IMPORTANT FOR INVITE)
+    await prisma.role.create({
+      data: {
+        name: "User",
+        businessId: business.id,
+      },
+    });
+
+    //////////////////////////////////////////////////////
+    // 4️⃣ ASSIGN ALL PERMISSIONS TO ADMIN
+    //////////////////////////////////////////////////////
     const permissions = await prisma.permission.findMany();
 
     if (permissions.length > 0) {
       await prisma.rolePermission.createMany({
-        data: permissions.map(p => ({
+        data: permissions.map((p) => ({
           roleId: adminRole.id,
           permissionId: p.id,
         })),
       });
     }
 
-    // 5 add owner as business admin
+    //////////////////////////////////////////////////////
+    // 5️⃣ ADD OWNER AS BUSINESS ADMIN
+    //////////////////////////////////////////////////////
     await prisma.businessUser.create({
       data: {
         userId,
@@ -52,50 +75,21 @@ exports.createBusiness = async (req, res) => {
       },
     });
 
-    return successResponse(res, business, "Business created", 201);
-
-  } catch (error) {
-    console.error(error);
-    return errorResponse(res, error.message, 500);
-  }
-};
-exports.switchBusiness = async (req, res) => {
-  try {
-    const { businessId } = req.body;
-    const userId = req.user.userId;
-
-    const membership = await prisma.businessUser.findUnique({
-      where: {
-        userId_businessId: {
-          userId,
-          businessId,
-        },
+    //////////////////////////////////////////////////////
+    // ⭐ AUTO SET ACTIVE BUSINESS FOR USER
+    //////////////////////////////////////////////////////
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        activeBusinessId: business.id,
       },
     });
 
-    if (!membership) {
-      return errorResponse(res, "Not a member of this business", 403);
-    }
-
-    const token = generateToken({
-  userId: userId,   // ❗ not id
-  email: req.user.email,
-  role: req.user.role,
-  isActive: req.user.isActive,
-  activeBusinessId: businessId   // ❗ direct field
-});
-
-    return successResponse(
-      res,
-      {
-        token,
-        activeBusinessId: businessId,
-      },
-      "Business switched successfully"
-    );
+    return successResponse(res, business, "Business created", 201);
 
   } catch (error) {
-    console.error("Switch business error:", error);
+    console.error("Create business error:", error);
     return errorResponse(res, error.message, 500);
   }
 };
+
