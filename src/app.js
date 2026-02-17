@@ -7,8 +7,8 @@ const businessRoutes = require("./routes/businessRoutes");
 const customerRoutes = require("./routes/customerRoutes");
 const invoiceRoutes = require("./routes/invoiceRoutes");
 const subscriptionRoutes = require("./routes/subscriptionRoutes");
-
-
+const permissionRoutes = require("./routes/permission.routes");
+const userManagementRoutes = require("./routes/userManagementRoutes");
 const app = express();
 
 app.use(cors());
@@ -19,7 +19,8 @@ app.use("/api/business", businessRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/subscriptions", subscriptionRoutes);
-app.use("/api/user-management", require("./routes/userManagementRoutes"));
+app.use("/api/user-management",userManagementRoutes);
+app.use("/api/permissions", permissionRoutes);
 
 app.get("/", (req, res) => {
   res.send("QUE Accounting Backend Running...");

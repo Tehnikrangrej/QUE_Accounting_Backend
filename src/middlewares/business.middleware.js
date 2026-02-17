@@ -2,20 +2,42 @@ const prisma = require("../config/prisma");
 
 module.exports = async (req, res, next) => {
   try {
-    const { userId, activeBusinessId } = req.user;
+    let { userId, activeBusinessId } = req.user;
 
     //////////////////////////////////////////////////////
-    // 1️⃣ User must have active business
+    // 1️⃣ AUTO PICK BUSINESS IF NOT SET
     //////////////////////////////////////////////////////
     if (!activeBusinessId) {
-      return res.status(400).json({
-        success: false,
-        message: "No active business found",
+      const firstMembership = await prisma.businessUser.findFirst({
+        where: {
+          userId,
+          isActive: true,
+        },
+        include: {
+          business: true,
+        },
       });
+
+      if (!firstMembership) {
+        return res.status(400).json({
+          success: false,
+          message: "No active business found",
+        });
+      }
+
+      activeBusinessId = firstMembership.businessId;
+
+      // OPTIONAL: update user default business
+      await prisma.user.update({
+        where: { id: userId },
+        data: { activeBusinessId },
+      });
+
+      req.user.activeBusinessId = activeBusinessId;
     }
 
     //////////////////////////////////////////////////////
-    // 2️⃣ Membership + business + subscription
+    // 2️⃣ FIND MEMBERSHIP
     //////////////////////////////////////////////////////
     const membership = await prisma.businessUser.findUnique({
       where: {
@@ -42,17 +64,17 @@ module.exports = async (req, res, next) => {
     }
 
     //////////////////////////////////////////////////////
-    // 3️⃣ BUSINESS MUST BE ACTIVE
+    // 3️⃣ BUSINESS ACTIVE
     //////////////////////////////////////////////////////
     if (!membership.business.isActive) {
       return res.status(403).json({
         success: false,
-        message: "Business inactive. Waiting for subscription activation.",
+        message: "Business inactive",
       });
     }
 
     //////////////////////////////////////////////////////
-    // 4️⃣ SUBSCRIPTION MUST BE ACTIVE
+    // 4️⃣ SUBSCRIPTION ACTIVE
     //////////////////////////////////////////////////////
     if (
       !membership.business.subscription ||
@@ -65,7 +87,7 @@ module.exports = async (req, res, next) => {
     }
 
     //////////////////////////////////////////////////////
-    // 5️⃣ Attach for next middleware/controllers
+    // 5️⃣ ATTACH TO REQUEST
     //////////////////////////////////////////////////////
     req.business = membership.business;
     req.membership = membership;

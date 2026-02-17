@@ -9,7 +9,7 @@ const {
 
 const authMiddleware = require("../middlewares/authMiddleware");
 const businessMiddleware = require("../middlewares/business.middleware");
-const checkPermission = require("../middlewares/permissionMiddleware");
+const checkPermission = require("../middlewares/checkPermission");
 
 const router = express.Router();
 

@@ -2,7 +2,7 @@ const router = require("express").Router();
 const authMiddleware= require("../middlewares/authMiddleware");
 
 const checkBusinessSubscriptionReadOnly = require("../middlewares/subscriptionMiddleware");
-const checkPermission = require("../middlewares/permissionMiddleware");
+const checkPermission = require("../middlewares/checkPermission");
 const businessMiddleware = require("../middlewares/business.middleware");
 const controller = require("../controllers/customerController");
 
