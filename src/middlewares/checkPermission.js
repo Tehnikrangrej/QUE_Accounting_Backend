@@ -8,9 +8,6 @@ const checkPermission = (module, action) => {
       const userId = req.user.userId || req.user.id;
       const businessId = req.business.id;
 
-      //////////////////////////////////////////////////////
-      // GET MEMBERSHIP + PERMISSIONS
-      //////////////////////////////////////////////////////
       const membership = await prisma.businessUser.findFirst({
         where: {
           userId,
@@ -36,9 +33,12 @@ const checkPermission = (module, action) => {
       }
 
       //////////////////////////////////////////////////////
-      // OWNER BYPASS ONLY
+      // OWNER + ADMIN BYPASS
       //////////////////////////////////////////////////////
-      if (membership.role?.name === "Owner") {
+      if (
+        membership.role?.name === "Owner" ||
+        membership.role?.name === "Admin"
+      ) {
         return next();
       }
 

@@ -3,53 +3,127 @@ const prisma = require("../config/prisma");
 //////////////////////////////////////////////////////
 // CREATE CUSTOMER
 //////////////////////////////////////////////////////
-
 exports.createCustomer = async (req, res) => {
   try {
-    const { name, email, phone, address } = req.body;
+    const {
+      company,
+      vatNumber,
+      phone,
+      website,
+      group,
+      currency = "SYSTEM",
+      defaultLanguage = "SYSTEM",
+
+      address,
+      city,
+      state,
+      zipCode,
+      country,
+
+      billingStreet,
+      billingCity,
+      billingState,
+      billingZipCode,
+      billingCountry,
+
+      shippingStreet,
+      shippingCity,
+      shippingState,
+      shippingZipCode,
+      shippingCountry,
+    } = req.body;
+
+    //////////////////////////////////////////////////////
+    // REQUIRED FIELD
+    //////////////////////////////////////////////////////
+    if (!company) {
+      return res.status(400).json({
+        success: false,
+        message: "company is required",
+      });
+    }
 
     const customer = await prisma.customer.create({
       data: {
-        name,
-        email,
-        phone,
-        address,
         businessId: req.business.id,
+
+        company,
+        vatNumber,
+        phone,
+        website,
+        group,
+        currency,
+        defaultLanguage,
+
+        address,
+        city,
+        state,
+        zipCode,
+        country,
+
+        billingStreet,
+        billingCity,
+        billingState,
+        billingZipCode,
+        billingCountry,
+
+        shippingStreet,
+        shippingCity,
+        shippingState,
+        shippingZipCode,
+        shippingCountry,
       },
     });
 
-    res.status(201).json({ success: true, customer });
+    res.status(201).json({
+      success: true,
+      customer,
+    });
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("createCustomer error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
 //////////////////////////////////////////////////////
 // GET ALL CUSTOMERS
 //////////////////////////////////////////////////////
-
 exports.getCustomers = async (req, res) => {
   try {
     const customers = await prisma.customer.findMany({
-      where: { businessId: req.business.id },
-      orderBy: { createdAt: "desc" },
+      where: {
+        businessId: req.business.id,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
     });
 
-    res.json({ success: true, customers });
+    res.json({
+      success: true,
+      customers,
+    });
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
 //////////////////////////////////////////////////////
 // UPDATE CUSTOMER
 //////////////////////////////////////////////////////
-
 exports.updateCustomer = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const customer = await prisma.customer.updateMany({
+    const updated = await prisma.customer.updateMany({
       where: {
         id,
         businessId: req.business.id,
@@ -57,29 +131,56 @@ exports.updateCustomer = async (req, res) => {
       data: req.body,
     });
 
-    res.json({ success: true, customer });
+    if (updated.count === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Customer updated",
+    });
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
 //////////////////////////////////////////////////////
 // DELETE CUSTOMER
 //////////////////////////////////////////////////////
-
 exports.deleteCustomer = async (req, res) => {
   try {
     const { id } = req.params;
 
-    await prisma.customer.deleteMany({
+    const deleted = await prisma.customer.deleteMany({
       where: {
         id,
         businessId: req.business.id,
       },
     });
 
-    res.json({ success: true });
+    if (deleted.count === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Customer deleted",
+    });
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };

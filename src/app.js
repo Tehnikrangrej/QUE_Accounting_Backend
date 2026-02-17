@@ -9,6 +9,7 @@ const invoiceRoutes = require("./routes/invoiceRoutes");
 const subscriptionRoutes = require("./routes/subscriptionRoutes");
 const permissionRoutes = require("./routes/permission.routes");
 const userManagementRoutes = require("./routes/userManagementRoutes");
+const settingsRoutes = require("./routes/settings");
 const app = express();
 
 app.use(cors());
@@ -21,9 +22,19 @@ app.use("/api/invoices", invoiceRoutes);
 app.use("/api/subscriptions", subscriptionRoutes);
 app.use("/api/user-management",userManagementRoutes);
 app.use("/api/permissions", permissionRoutes);
+app.use("/api/settings", settingsRoutes);
 
 app.get("/", (req, res) => {
   res.send("QUE Accounting Backend Running...");
+});
+
+app.use((err, req, res, next) => {
+  console.error("GLOBAL ERROR:", err);
+
+  res.status(500).json({
+    success: false,
+    message: err.message || "Internal server error",
+  });
 });
 
 module.exports = app;

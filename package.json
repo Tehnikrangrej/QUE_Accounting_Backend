@@ -16,6 +16,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.3.0",
     "@prisma/client": "^7.3.0",
+    "axios": "^1.13.5",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^1.41.3",
     "cors": "^2.8.5",
@@ -27,7 +28,7 @@
     "pdfkit": "^0.17.2",
     "pg": "^8.17.2",
     "prisma": "^7.3.0",
-    "puppeteer": "^24.36.1",
+    "puppeteer": "^24.37.3",
     "streamifier": "^0.1.1"
   },
   "devDependencies": {
