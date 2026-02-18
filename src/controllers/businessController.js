@@ -93,3 +93,154 @@ exports.createBusiness = async (req, res) => {
   }
 };
 
+
+//////////////////////////////////////////////////////
+// GET COMPLETE DASHBOARD DATA
+//////////////////////////////////////////////////////
+exports.getMyData = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    //////////////////////////////////////////////////////
+    // 1️⃣ LOGIN USER
+    //////////////////////////////////////////////////////
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        activeBusinessId: true,
+      },
+    });
+
+    //////////////////////////////////////////////////////
+    // 2️⃣ BUSINESSES CREATED BY LOGIN USER (OWNER)
+    //////////////////////////////////////////////////////
+    const ownedBusinesses = await prisma.business.findMany({
+      where: { ownerId: userId },
+
+      include: {
+        settings: true,
+
+        customers: true,
+
+        invoices: {
+          include: { customer: true },
+          orderBy: { createdAt: "desc" },
+        },
+
+        //////////////////////////////////////////////////////
+        // USERS + PERMISSIONS
+        //////////////////////////////////////////////////////
+        users: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+
+            role: {
+              include: {
+                rolePermissions: {
+                  include: {
+                    permission: true,
+                  },
+                },
+              },
+            },
+
+            userPermissions: {
+              include: {
+                permission: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    //////////////////////////////////////////////////////
+    // 3️⃣ BUSINESSES WHERE USER IS MEMBER
+    //////////////////////////////////////////////////////
+    const memberships = await prisma.businessUser.findMany({
+      where: {
+        userId,
+        isActive: true,
+      },
+
+      include: {
+        role: {
+          include: {
+            rolePermissions: {
+              include: {
+                permission: true,
+              },
+            },
+          },
+        },
+
+        userPermissions: {
+          include: {
+            permission: true,
+          },
+        },
+
+        business: {
+          include: {
+            settings: true,
+
+            customers: true,
+
+            invoices: {
+              include: { customer: true },
+              orderBy: { createdAt: "desc" },
+            },
+          },
+        },
+      },
+    });
+
+    //////////////////////////////////////////////////////
+    // REMOVE DUPLICATE BUSINESSES
+    //////////////////////////////////////////////////////
+    const ownedIds = ownedBusinesses.map((b) => b.id);
+
+    const memberBusinesses = memberships
+      .map((m) => ({
+        businessUserId: m.id,
+
+        role: m.role,
+        userPermissions: m.userPermissions,
+
+        business: m.business,
+      }))
+      .filter((m) => !ownedIds.includes(m.business.id));
+
+    //////////////////////////////////////////////////////
+    // FINAL RESPONSE
+    //////////////////////////////////////////////////////
+    return res.status(200).json({
+      success: true,
+
+      user,
+
+      ownedBusinesses,
+
+      memberBusinesses,
+    });
+
+  } catch (err) {
+    console.error(err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
