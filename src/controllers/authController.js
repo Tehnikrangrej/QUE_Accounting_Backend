@@ -95,3 +95,37 @@ exports.login = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+//////////////////////////////////////////////////////
+// GET ALL USERS
+//////////////////////////////////////////////////////
+exports.getAllUsers = async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        memberships: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: users.length,
+      users,
+    });
+
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
