@@ -244,3 +244,102 @@ exports.getMyData = async (req, res) => {
     });
   }
 };
+
+exports.getBusinessById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.userId;
+
+    const business = await prisma.business.findFirst({
+      where: {
+        id,
+        OR: [
+          { ownerId: userId },
+          {
+            users: {
+              some: {
+                userId: userId,
+                isActive: true,
+              },
+            },
+          },
+        ],
+      },
+      include: {
+        users:true,
+        settings: true,
+        customers: true,
+        invoices: {
+          include: { customer: true },
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    });
+
+    if (!business) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to access this business",
+      });
+    }
+const membership = await prisma.businessUser.findFirst({
+      where: {
+        businessId: id,
+        userId: userId,
+      },
+      include: {
+        role: {
+          include: {
+            rolePermissions: {
+              include: {
+                permission: true,
+              },
+            },
+          },
+        },
+        userPermissions: {
+          include: {
+            permission: true,
+          },
+        },
+      },
+    });
+
+    //////////////////////////////////////////////////////
+    // 3️⃣ Merge permissions (ROLE + DIRECT)
+    //////////////////////////////////////////////////////
+    let finalPermissions = [];
+
+    if (membership) {
+      const rolePermissions =
+        membership.role?.rolePermissions.map(
+          (rp) => `${rp.permission.module}:${rp.permission.action}`
+        ) || [];
+
+      const directPermissions =
+        membership.userPermissions.map(
+          (up) => `${up.permission.module}:${up.permission.action}`
+        ) || [];
+
+      finalPermissions = [...new Set([...rolePermissions, ...directPermissions])];
+    }
+
+    //////////////////////////////////////////////////////
+    // 4️⃣ Return response
+    //////////////////////////////////////////////////////
+    return res.status(200).json({
+      success: true,
+      business,
+      Role: membership?.role || null,
+      Permissions: finalPermissions,
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+  
