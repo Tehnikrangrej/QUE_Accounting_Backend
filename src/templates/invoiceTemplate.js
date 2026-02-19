@@ -11,10 +11,11 @@ module.exports = (invoice, settings = {}) => `
 
 body{
   font-family: Arial, Helvetica, sans-serif;
-  font-size:10px;
-  color:#000;
+  font-size:12px;
+  color:#222;
   margin:0;
-  padding:20px;
+  padding:40px;
+  background:#fff;
 }
 
 .container{
@@ -22,82 +23,103 @@ body{
 }
 
 /* ================= HEADER ================= */
+
 .header{
   display:flex;
   justify-content:space-between;
   align-items:flex-start;
-  border-bottom:1px solid #bcbcbc;
-  padding-bottom:8px;
-  margin-bottom:10px;
+  border-bottom:1.5px solid #cfcfcf;
+  padding-bottom:18px;
+  margin-bottom:18px;
 }
 
 .logo img{
-  width:110px;
-  height:auto;
+  width:140px;
 }
 
 .company{
-  font-size:10px;
-  line-height:1.35;
-  font-weight:bold;
+  font-size:12px;
+  line-height:1.6;
+  font-weight:600;
 }
 
 .invoice-title{
   text-align:right;
-  color:#0a3d91;
-  font-weight:bold;
-  font-size:30px;
-  line-height:1.1;
+  color:#1f4e79;
+  font-weight:700;
+  font-size:28px;
+}
+
+.invoice-title span{
+  font-size:13px;
+  font-weight:600;
+  color:#1f4e79;
 }
 
 /* ================= META ================= */
+
 .meta{
   display:grid;
   grid-template-columns:repeat(3,1fr);
-  border:1px solid #ccc;
-  margin-bottom:8px;
+  background:#f3f3f3;
+  border:1px solid #cfcfcf;
+  margin-bottom:18px;
 }
 
 .meta div{
-  padding:6px;
-  border-right:1px solid #ccc;
-  line-height:1.4;
+  padding:10px 12px;
+  border-right:1px solid #cfcfcf;
 }
-.meta div:last-child{border-right:none;}
 
-/* ================= BILL + SHIP ================= */
+.meta div:last-child{
+  border-right:none;
+}
+
+.meta strong{
+  color:#1f4e79;
+  font-size:11px;
+}
+
+/* ================= BILL / SHIP ================= */
+
 .address-row{
   display:grid;
   grid-template-columns:1fr 1fr;
-  gap:8px;
-  margin-bottom:8px;
+  gap:20px;
+  margin-bottom:18px;
 }
 
 .box{
-  border:1px solid #ccc;
-  padding:6px;
-  line-height:1.4;
+  border:1px solid #cfcfcf;
+  background:#f6f6f6;
+  padding:12px;
+  line-height:1.6;
+}
+
+.box strong{
+  color:#1f4e79;
+  font-size:12px;
 }
 
 /* ================= TABLE ================= */
+
 table{
   width:100%;
   border-collapse:collapse;
-  margin-top:4px;
 }
 
 thead th{
-  background:#0a3d91;
+  background:#1f4e79;
   color:#fff;
-  font-size:10px;
-  padding:5px;
+  font-size:12px;
+  padding:10px;
   text-align:center;
 }
 
 tbody td{
-  border-bottom:1px solid #ddd;
-  font-size:10px;
-  padding:5px;
+  padding:9px;
+  border-bottom:1px solid #e5e5e5;
+  font-size:12px;
   text-align:center;
 }
 
@@ -106,55 +128,77 @@ tbody td:nth-child(2){
 }
 
 /* ================= SUMMARY ================= */
+
 .summary{
   display:grid;
   grid-template-columns:1fr 1fr;
-  gap:8px;
-  margin-top:8px;
+  gap:20px;
+  margin-top:18px;
 }
 
 .summary-box{
-  border:1px solid #ccc;
-  padding:6px;
-  background:#fafafa;
-  line-height:1.5;
+  background:#f5f5f5;
+  border:1px solid #cfcfcf;
+  padding:12px;
+}
+
+.summary-box strong{
+  color:#1f4e79;
 }
 
 .totals table td{
-  padding:4px;
-  font-size:10px;
+  padding:7px;
+  font-size:12px;
 }
 
 .total-blue{
-  background:#0a3d91;
+  background:#1f4e79;
   color:#fff;
   font-weight:bold;
 }
 
 /* ================= WORDS ================= */
+
 .words{
-  border:1px solid #ccc;
-  margin-top:6px;
-  padding:5px;
-  font-size:10px;
+  border:1px solid #cfcfcf;
+  padding:10px;
+  margin-top:12px;
+  background:#f7f7f7;
 }
 
 /* ================= BANK ================= */
+
 .bank{
-  border:1px solid #ccc;
-  margin-top:6px;
-  padding:6px;
-  line-height:1.4;
+  border:1px solid #cfcfcf;
+  margin-top:18px;
+  background:#f5f5f5;
+  padding:14px;
+  line-height:1.7;
 }
 
-/* ================= FOOTER ================= */
+.bank strong{
+  color:#1f4e79;
+}
+
+/* ================= NOTE ================= */
+
+.note{
+  border:1px solid #cfcfcf;
+  margin-top:12px;
+  padding:10px;
+  background:#f7f7f7;
+}
+
+/* ================= SIGNATURE ================= */
+
 .signature{
-  margin-top:18px;
+  margin-top:60px;
   text-align:right;
-  font-size:10px;
+  font-size:12px;
 }
 
 </style>
+
 </head>
 
 <body>
