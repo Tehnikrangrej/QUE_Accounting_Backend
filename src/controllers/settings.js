@@ -27,11 +27,12 @@ exports.getSettings = async (req, res) => {
 //////////////////////////////////////////////////////
 // CREATE OR UPDATE SETTINGS
 //////////////////////////////////////////////////////
+//////////////////////////////////////////////////////
 exports.saveSettings = async (req, res) => {
   try {
     const businessId = req.business.id;
     const data = { ...req.body };
-    
+
     //////////////////////////////////////////////////////
     // OPTIONAL LOGO UPLOAD
     //////////////////////////////////////////////////////
@@ -39,23 +40,45 @@ exports.saveSettings = async (req, res) => {
       data.companyLogo = req.file.path;
     }
 
-    const settings = await prisma.settings.upsert({
+    //////////////////////////////////////////////////////
+    // CHECK IF SETTINGS EXIST
+    //////////////////////////////////////////////////////
+    const existingSettings = await prisma.settings.findUnique({
       where: { businessId },
+    });
 
-      create: {
-        businessId,
-        ...data,
-      },
+    let settings;
 
-      update: {
-        ...data,
-      },
+    //////////////////////////////////////////////////////
+    // CREATE (FIRST TIME ONLY)
+    //////////////////////////////////////////////////////
+    if (!existingSettings) {
+      settings = await prisma.settings.create({
+        data: {
+          businessId,
+          ...data,
+        },
+      });
+
+      return successResponse(
+        res,
+        settings,
+        "Settings created successfully"
+      );
+    }
+
+    //////////////////////////////////////////////////////
+    // UPDATE ONLY
+    //////////////////////////////////////////////////////
+    settings = await prisma.settings.update({
+      where: { businessId },
+      data,
     });
 
     return successResponse(
       res,
       settings,
-      "Settings saved successfully"
+      "Settings updated successfully"
     );
 
   } catch (error) {

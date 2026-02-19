@@ -27,6 +27,8 @@ router.get(
 
 router.post(
   "/",
+  authMiddleware,
+  businessMiddleware,
   uploadLogo.single("companyLogo"),
   checkPermission("settings", "update"),
   controller.saveSettings
