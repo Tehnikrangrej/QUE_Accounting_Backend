@@ -186,20 +186,107 @@ exports.getInvoiceById = async (req, res) => {
 exports.updateInvoice = async (req, res) => {
   try {
     const invoiceId = req.params.id;
+    const { items = [], discount = 0, ...invoiceData } = req.body;
 
-    const invoice = await prisma.invoice.update({
-      where: {
-        id: invoiceId,
-      },
-      data: req.body, // update whatever comes from body
+    const invoice = await prisma.$transaction(async (tx) => {
+
+      //////////////////////////////////////////////////////
+      // 1️⃣ CALCULATE ITEMS + TOTALS
+      //////////////////////////////////////////////////////
+      let subtotal = 0;
+      let totalTax = 0;
+
+      const newItems = items.map((i) => {
+        const hours = Number(i.hours);
+        const rate = Number(i.rate);
+
+        const amount = hours * rate;
+        const taxAmount =
+          (amount * Number(i.taxPercent || 0)) / 100;
+
+        subtotal += amount;
+        totalTax += taxAmount;
+
+        return {
+          invoiceId,
+          description: i.description,
+          hours,
+          rate,
+          taxPercent: Number(i.taxPercent || 0),
+          taxAmount,
+          amount,
+        };
+      });
+
+      const grandTotal = subtotal + totalTax - Number(discount);
+
+      //////////////////////////////////////////////////////
+      // 2️⃣ UPDATE INVOICE
+      //////////////////////////////////////////////////////
+      const updatedInvoice = await tx.invoice.update({
+        where: { id: invoiceId },
+        data: {
+          ...invoiceData,
+
+          invoiceDate: invoiceData.invoiceDate
+            ? new Date(invoiceData.invoiceDate)
+            : undefined,
+
+          dueDate: invoiceData.dueDate
+            ? new Date(invoiceData.dueDate)
+            : undefined,
+
+          poDate: invoiceData.poDate
+            ? new Date(invoiceData.poDate)
+            : undefined,
+
+          discount: Number(discount),
+          subtotal,
+          totalTax,
+          grandTotal,
+        },
+      });
+
+      //////////////////////////////////////////////////////
+      // 3️⃣ REPLACE ITEMS
+      //////////////////////////////////////////////////////
+      if (items.length > 0) {
+
+        // delete old items
+        await tx.invoiceItem.deleteMany({
+          where: { invoiceId },
+        });
+
+        // create new items
+        await tx.invoiceItem.createMany({
+          data: newItems,
+        });
+      }
+
+      //////////////////////////////////////////////////////
+      // 4️⃣ RETURN UPDATED DATA
+      //////////////////////////////////////////////////////
+      return tx.invoice.findUnique({
+        where: { id: invoiceId },
+        include: {
+          customer: true,
+          items: true,
+        },
+      });
     });
 
+    //////////////////////////////////////////////////////
+    // RESPONSE
+    //////////////////////////////////////////////////////
     res.json({
       success: true,
+      message: "Invoice updated successfully",
       data: invoice,
     });
 
   } catch (error) {
+    console.error("updateInvoice error:", error);
+
     res.status(500).json({
       success: false,
       message: error.message,
