@@ -1,6 +1,7 @@
 const express = require("express");
 const {
   getInvoices,
+  getInvoiceById,
   createInvoice,
   updateInvoice,
   deleteInvoice,
@@ -17,7 +18,7 @@ router.use(authMiddleware);
 
 // Allow read operations even with expired subscription
 router.get("/", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "read"), getInvoices);
-
+router.get("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "read"), getInvoiceById); 
 // Require active subscription for write operations
 router.post("/",authMiddleware, businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "create"), createInvoice);
 router.patch("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), updateInvoice);
