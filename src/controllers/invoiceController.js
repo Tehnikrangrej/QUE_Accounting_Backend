@@ -29,6 +29,24 @@ exports.createInvoice = async (req, res) => {
     }
 
     //////////////////////////////////////////////////////
+    // ✅ FETCH BUSINESS SETTINGS
+    //////////////////////////////////////////////////////
+    const settings = await prisma.settings.findUnique({
+      where: { businessId: req.business.id },
+    });
+
+    // ✅ AUTO DEFAULT LOGIC
+    const finalAdminNote =
+      adminNote && adminNote.trim() !== ""
+        ? adminNote
+        : settings?.defaultFooterNote || null;
+
+    const finalTerms =
+      terms && terms.trim() !== ""
+        ? terms
+        : settings?.defaultTerms || null;
+
+    //////////////////////////////////////////////////////
     // CREATE INVOICE (TRANSACTION)
     //////////////////////////////////////////////////////
     const invoice = await prisma.$transaction(async (tx) => {
@@ -46,7 +64,8 @@ exports.createInvoice = async (req, res) => {
         const rate = Number(i.rate);
 
         const amount = hours * rate;
-        const taxAmount = (amount * Number(i.taxPercent || 0)) / 100;
+        const taxAmount =
+          (amount * Number(i.taxPercent || 0)) / 100;
 
         subtotal += amount;
         totalTax += taxAmount;
@@ -76,8 +95,9 @@ exports.createInvoice = async (req, res) => {
           poNumber,
           poDate: poDate ? new Date(poDate) : null,
 
-          adminNote,
-          terms,
+          // ✅ AUTO FILLED VALUES
+          adminNote: finalAdminNote,
+          terms: finalTerms,
 
           subtotal,
           totalTax,
@@ -89,16 +109,13 @@ exports.createInvoice = async (req, res) => {
         include: { customer: true, items: true },
       });
     });
+
     //////////////////////////////////////////////////////
-    // PDF GENERATION + CLOUDINARY UPLOAD
+    // PDF GENERATION
     //////////////////////////////////////////////////////
     let finalInvoice = invoice;
 
     try {
-      const settings = await prisma.settings.findUnique({
-        where: { businessId: req.business.id },
-      });
-
       const pdfBuffer = await generateInvoicePdf(invoice, settings);
 
       const pdfUrl = await uploadInvoicePdf(
@@ -106,7 +123,6 @@ exports.createInvoice = async (req, res) => {
         invoice.invoiceNumber
       );
 
-      // 🔥 UPDATE & RETURN UPDATED DATA
       finalInvoice = await prisma.invoice.update({
         where: { id: invoice.id },
         data: { pdfUrl },
@@ -134,7 +150,6 @@ exports.createInvoice = async (req, res) => {
     });
   }
 };
-
 //////////////////////////////////////////////////////
 // GET ALL INVOICES
 //////////////////////////////////////////////////////
