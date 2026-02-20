@@ -2,7 +2,8 @@ const express = require("express");
 const {
   getInvoices,
   createInvoice,
-  updateInvoiceStatus,
+  updateInvoice,
+  deleteInvoice,
 } = require("../controllers/invoiceController");
 const authMiddleware = require("../middlewares/authMiddleware");
 const businessMiddleware = require("../middlewares/business.middleware");
@@ -19,6 +20,6 @@ router.get("/", businessMiddleware, checkBusinessSubscription, checkPermission("
 
 // Require active subscription for write operations
 router.post("/",authMiddleware, businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "create"), createInvoice);
-router.patch("/:id/status", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), updateInvoiceStatus);
-
+router.patch("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), updateInvoice);
+router.delete("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "delete"), deleteInvoice);
 module.exports = router;

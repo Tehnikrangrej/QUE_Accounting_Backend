@@ -183,46 +183,56 @@ exports.getInvoiceById = async (req, res) => {
 //////////////////////////////////////////////////////
 // UPDATE STATUS
 //////////////////////////////////////////////////////
-exports.updateInvoiceStatus = async (req, res) => {
+exports.updateInvoice = async (req, res) => {
   try {
+    const invoiceId = req.params.id;
+
     const invoice = await prisma.invoice.update({
       where: {
-        id_businessId: {
-          id: req.params.id,
-          businessId: req.business.id,
-        },
+        id: invoiceId,
       },
-      data: { status: req.body.status },
+      data: req.body, // update whatever comes from body
     });
 
-    res.json({ success: true, data: invoice });
+    res.json({
+      success: true,
+      data: invoice,
+    });
 
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
-
 //////////////////////////////////////////////////////
 // DELETE INVOICE
 //////////////////////////////////////////////////////
 exports.deleteInvoice = async (req, res) => {
   try {
-    await prisma.invoice.delete({
-      where: {
-        id_businessId: {
-          id: req.params.id,
-          businessId: req.business.id,
-        },
-      },
-    });
+    const invoiceId = req.params.id;
+
+    await prisma.$transaction([
+      prisma.invoiceItem.deleteMany({
+        where: { invoiceId },
+      }),
+
+      prisma.invoice.delete({
+        where: { id: invoiceId },
+      }),
+    ]);
 
     res.json({
       success: true,
-      message: "Invoice deleted",
+      message: "Invoice deleted successfully",
     });
 
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
