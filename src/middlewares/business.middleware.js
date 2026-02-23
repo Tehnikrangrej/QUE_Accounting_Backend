@@ -2,48 +2,28 @@ const prisma = require("../config/prisma");
 
 module.exports = async (req, res, next) => {
   try {
-    let { userId, activeBusinessId } = req.user;
+    const userId = req.user.userId;
 
     //////////////////////////////////////////////////////
-    // 1️⃣ AUTO PICK BUSINESS IF NOT SET
+    // 1️⃣ READ BUSINESS FROM HEADER
     //////////////////////////////////////////////////////
-    if (!activeBusinessId) {
-      const firstMembership = await prisma.businessUser.findFirst({
-        where: {
-          userId,
-          isActive: true,
-        },
-        include: {
-          business: true,
-        },
+    const businessId = req.headers["x-business-id"];
+
+    if (!businessId) {
+      return res.status(400).json({
+        success: false,
+        message: "x-business-id header required",
       });
-
-      if (!firstMembership) {
-        return res.status(400).json({
-          success: false,
-          message: "No active business found",
-        });
-      }
-
-      activeBusinessId = firstMembership.businessId;
-
-      // OPTIONAL: update user default business
-      await prisma.user.update({
-        where: { id: userId },
-        data: { activeBusinessId },
-      });
-
-      req.user.activeBusinessId = activeBusinessId;
     }
 
     //////////////////////////////////////////////////////
-    // 2️⃣ FIND MEMBERSHIP
+    // 2️⃣ CHECK MEMBERSHIP
     //////////////////////////////////////////////////////
     const membership = await prisma.businessUser.findUnique({
       where: {
         userId_businessId: {
           userId,
-          businessId: activeBusinessId,
+          businessId,
         },
       },
       include: {
@@ -59,7 +39,7 @@ module.exports = async (req, res, next) => {
     if (!membership) {
       return res.status(403).json({
         success: false,
-        message: "You are not a member of this business",
+        message: "You are not member of this business",
       });
     }
 
@@ -87,7 +67,7 @@ module.exports = async (req, res, next) => {
     }
 
     //////////////////////////////////////////////////////
-    // 5️⃣ ATTACH TO REQUEST
+    // 5️⃣ ATTACH CONTEXT
     //////////////////////////////////////////////////////
     req.business = membership.business;
     req.membership = membership;
@@ -97,7 +77,7 @@ module.exports = async (req, res, next) => {
   } catch (error) {
     console.error("Business middleware error:", error);
 
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: error.message,
     });
