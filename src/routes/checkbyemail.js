@@ -13,7 +13,6 @@ const authMiddleware = require("../middlewares/authMiddleware");
 
 router.post(
   "/",
-  authMiddleware, // optional
   checkUserController.checkUserByEmail
 );
 
