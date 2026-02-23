@@ -5,8 +5,6 @@ const checkUserController = require(
   "../controllers/checkByEmail"
 );
 
-const authMiddleware = require("../middlewares/authMiddleware");
-
 //////////////////////////////////////////////////////
 // CHECK USER EMAIL
 //////////////////////////////////////////////////////
