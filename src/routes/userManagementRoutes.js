@@ -18,6 +18,7 @@ router.use(businessMiddleware);
 
 router.get("/", checkPermission("user", "read"), getBusinessUsers);
 
+
 router.post("/invite", checkPermission("user", "create"), inviteUser);
 
 router.patch(

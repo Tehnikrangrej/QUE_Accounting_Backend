@@ -1,6 +1,5 @@
 const prisma = require("../config/prisma");
 const { successResponse, errorResponse } = require("../utils/response");
-
 //////////////////////////////////////////////////////
 // GET BUSINESS USERS (NO ADMIN)
 //////////////////////////////////////////////////////
