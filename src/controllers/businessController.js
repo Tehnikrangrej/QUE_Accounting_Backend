@@ -119,7 +119,7 @@ exports.getMyData = async (req, res) => {
     //////////////////////////////////////////////////////
     // 2️⃣ BUSINESSES CREATED BY LOGIN USER (OWNER)
     //////////////////////////////////////////////////////
-    const ownedBusinesses = await prisma.business. findMany({
+    const ownedBusinesses = await prisma.business. find({
       where: { ownerId: userId },
 
       include: {
