@@ -64,6 +64,7 @@
     @@map("businesses")
     settings Settings[]
     payments Payment[]
+    creditNotes CreditNote[]
 }
 
   //////////////////////////////////////////////////////
@@ -233,6 +234,7 @@ model Customer {
 
   @@index([businessId])
   @@map("customers")
+  creditNotes CreditNote[]
 }
 
   //////////////////////////////////////////////////////
@@ -274,6 +276,7 @@ model Customer {
     @@index([businessId])
     @@map("invoices")
       payments Payment[]
+    creditNotes CreditNote[]
 }
   enum CreatorType {
     Admin
@@ -299,12 +302,9 @@ model Customer {
     @@map("invoice_items")
   }
 enum InvoiceStatus {
-  
   UNPAID
-  GENERATED
-  SENT
+  PARTIALLY_PAID
   PAID
-  CANCELLED
 }
   //////////////////////////////////////////////////////
   // SUBSCRIPTIONS (Manual Billing Ready)
@@ -390,8 +390,48 @@ model Payment {
   //////////////////////////////////////////////////////
   // META
   //////////////////////////////////////////////////////
+  createdBy     String
   createdAt     DateTime @default(now())
 
   @@index([invoiceId])
   @@map("payments")
+}
+//////////////////////////////////////////////////////
+// CREDIT NOTE
+//////////////////////////////////////////////////////
+
+model CreditNote {
+  id               String   @id @default(uuid())
+
+  ////////////////////////////////////////////////////
+  // RELATIONS
+  ////////////////////////////////////////////////////
+  businessId       String
+  customerId       String
+  invoiceId        String?   // nullable (credit may exist without invoice)
+
+  business Business @relation(fields: [businessId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+  invoice  Invoice? @relation(fields: [invoiceId], references: [id])
+
+  ////////////////////////////////////////////////////
+  // CREDIT DATA
+  ////////////////////////////////////////////////////
+  creditNumber     String
+  amount           Float
+  remainingAmount  Float
+
+  reason           String?
+  status           CreditNoteStatus @default(OPEN)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([customerId])
+}
+
+enum CreditNoteStatus {
+ OPEN
+ CLOSED
 }
