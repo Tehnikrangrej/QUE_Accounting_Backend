@@ -244,7 +244,7 @@ model Customer {
     businessId    String
     customerId    String
     invoiceNumber String
-    status        InvoiceStatus @default(DRAFT)
+    status        InvoiceStatus @default(UNPAID)
     invoiceDate   DateTime      @default(now())
     dueDate       DateTime?
     currency      String        @default("AED")
@@ -299,7 +299,8 @@ model Customer {
     @@map("invoice_items")
   }
 enum InvoiceStatus {
-  DRAFT
+  
+  UNPAID
   GENERATED
   SENT
   PAID
