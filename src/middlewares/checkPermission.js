@@ -1,73 +1,44 @@
 const prisma = require("../config/prisma");
 const { errorResponse } = require("../utils/response");
 
-const checkPermission = (module, action) => {
+const checkPermission = (moduleName, action) => {
   return async (req, res, next) => {
     try {
 
       const userId = req.user.userId || req.user.id;
       const businessId = req.business.id;
 
-      const membership = await prisma.businessUser.findFirst({
+      console.log("CHECK:", moduleName, action);
+      console.log("USER:", userId);
+      console.log("BUSINESS:", businessId);
+
+      const permission = await prisma.userPermission.findFirst({
         where: {
-          userId,
-          businessId,
-          isActive: true,
-        },
-        include: {
-          role: {
-            include: {
-              rolePermissions: {
-                include: { permission: true },
-              },
-            },
+          businessUser: {
+            userId: userId,
+            businessId: businessId,
+            isActive: true,
           },
-          userPermissions: {
-            include: { permission: true },
+          permission: {
+            action: action,
+            module: {
+              name: moduleName,
+            },
           },
         },
       });
 
-      if (!membership) {
-        return errorResponse(res, "Access denied", 403);
-      }
-
-      //////////////////////////////////////////////////////
-      // OWNER + ADMIN BYPASS
-      //////////////////////////////////////////////////////
-      if (
-        membership.role?.name === "Owner" ||
-        membership.role?.name === "Admin"
-      ) {
-        return next();
-      }
-
-      const roleAllowed =
-        membership.role?.rolePermissions?.some(
-          (rp) =>
-            rp.permission.module === module &&
-            rp.permission.action === action
-        ) || false;
-
-      const userAllowed =
-        membership.userPermissions?.some(
-          (up) =>
-            up.permission.module === module &&
-            up.permission.action === action
-        ) || false;
-
-      if (!roleAllowed && !userAllowed) {
+      if (!permission) {
         return errorResponse(
           res,
-          `Permission denied (${module}:${action})`,
+          `Permission denied (${moduleName}:${action})`,
           403
         );
       }
 
       next();
-
-    } catch (error) {
-      console.error("checkPermission error:", error);
+    } catch (err) {
+      console.error("Permission Error:", err);
       return errorResponse(res, "Internal server error", 500);
     }
   };

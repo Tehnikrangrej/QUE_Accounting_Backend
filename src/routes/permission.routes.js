@@ -1,29 +1,27 @@
 const router = require("express").Router();
-
-const authMiddleware = require("../middlewares/authMiddleware");
-const businessMiddleware = require("../middlewares/business.middleware");
-const adminOnly = require("../middlewares/adminOnly");
-
 const controller = require("../controllers/permissionController");
+const auth = require ("../middlewares/authMiddleware");
+const businessMiddleware = require("../middlewares/business.middleware");
 
-//////////////////////////////////////////////////////
-// GLOBAL MIDDLEWARE
-//////////////////////////////////////////////////////
-router.use(authMiddleware);
-router.use(businessMiddleware);
-router.use(adminOnly);
+router.post(
+  "/assign/:userId",
+  auth,
+  businessMiddleware,
+  controller.assignCrudPermissionsToUser
+);
 
-//////////////////////////////////////////////////////
-// PERMISSION MANAGEMENT
-//////////////////////////////////////////////////////
+router.delete(
+  "/remove/:userId",
+  auth,
+  businessMiddleware,
+  controller.removeCrudPermissionsFromUser
+);
 
-// Assign CRUD permissions
-router.post("/user/:userId", controller.assignCrudPermissionsToUser);
-
-// Remove permissions
-router.delete("/user/:userId", controller.removeCrudPermissionsFromUser);
-
-// Get user permissions
-router.get("/user/:userId", controller.getUserPermissions);
+router.get(
+  "/user/:userId",
+  auth,
+  businessMiddleware,
+  controller.getUserPermissions
+);
 
 module.exports = router;

@@ -2,50 +2,35 @@ const prisma = require("../config/prisma");
 const { successResponse, errorResponse } = require("../utils/response");
 
 //////////////////////////////////////////////////////
-// ASSIGN CRUD PERMISSIONS TO USER (ADMIN ONLY)
+// ASSIGN PERMISSIONS
 //////////////////////////////////////////////////////
-const assignCrudPermissionsToUser = async (req, res) => {
+exports.assignCrudPermissionsToUser = async (req, res) => {
   try {
     const { userId } = req.params;
     const { module, actions } = req.body;
     const businessId = req.business.id;
 
-    if (!module || !actions || !Array.isArray(actions)) {
-      return errorResponse(res, "module and actions required", 400);
+    if (!module || !Array.isArray(actions)) {
+      return errorResponse(res, "module & actions required", 400);
     }
 
-    //////////////////////////////////////////////////////
-    // 1️⃣ FIND MEMBERSHIP
-    //////////////////////////////////////////////////////
     const membership = await prisma.businessUser.findFirst({
-      where: {
-        userId,
-        businessId,
-        isActive: true,
-      },
+      where: { userId, businessId, isActive: true },
     });
 
-    if (!membership) {
-      return errorResponse(res, "User not found in business", 404);
-    }
+    if (!membership)
+      return errorResponse(res, "User not in business", 404);
 
-    //////////////////////////////////////////////////////
-    // 2️⃣ FIND PERMISSIONS
-    //////////////////////////////////////////////////////
     const permissions = await prisma.permission.findMany({
       where: {
-        module,
+        module: { name: module },
         action: { in: actions },
       },
     });
 
-    if (!permissions.length) {
+    if (!permissions.length)
       return errorResponse(res, "Permissions not found", 404);
-    }
 
-    //////////////////////////////////////////////////////
-    // 3️⃣ CREATE USER PERMISSIONS (NO DUPLICATE)
-    //////////////////////////////////////////////////////
     const data = permissions.map((p) => ({
       businessUserId: membership.id,
       permissionId: p.id,
@@ -56,21 +41,17 @@ const assignCrudPermissionsToUser = async (req, res) => {
       skipDuplicates: true,
     });
 
-    return successResponse(
-      res,
-      permissions,
-      "Permissions assigned successfully"
-    );
-  } catch (error) {
-    console.error("assignCrudPermissionsToUser error:", error);
+    return successResponse(res, permissions, "Permissions assigned");
+  } catch (err) {
+    console.error(err);
     return errorResponse(res, "Internal server error", 500);
   }
 };
 
 //////////////////////////////////////////////////////
-// REMOVE CRUD PERMISSION FROM USER
+// REMOVE PERMISSIONS
 //////////////////////////////////////////////////////
-const removeCrudPermissionsFromUser = async (req, res) => {
+exports.removeCrudPermissionsFromUser = async (req, res) => {
   try {
     const { userId } = req.params;
     const { module, actions } = req.body;
@@ -80,13 +61,12 @@ const removeCrudPermissionsFromUser = async (req, res) => {
       where: { userId, businessId },
     });
 
-    if (!membership) {
+    if (!membership)
       return errorResponse(res, "User not found", 404);
-    }
 
     const permissions = await prisma.permission.findMany({
       where: {
-        module,
+        module: { name: module },
         action: { in: actions },
       },
     });
@@ -99,8 +79,8 @@ const removeCrudPermissionsFromUser = async (req, res) => {
     });
 
     return successResponse(res, null, "Permissions removed");
-  } catch (error) {
-    console.error("removeCrudPermissionsFromUser error:", error);
+  } catch (err) {
+    console.error(err);
     return errorResponse(res, "Internal server error", 500);
   }
 };
@@ -108,7 +88,7 @@ const removeCrudPermissionsFromUser = async (req, res) => {
 //////////////////////////////////////////////////////
 // GET USER PERMISSIONS
 //////////////////////////////////////////////////////
-const getUserPermissions = async (req, res) => {
+exports.getUserPermissions = async (req, res) => {
   try {
     const { userId } = req.params;
     const businessId = req.business.id;
@@ -117,28 +97,26 @@ const getUserPermissions = async (req, res) => {
       where: { userId, businessId },
       include: {
         userPermissions: {
-          include: { permission: true },
+          include: {
+            permission: {
+              include: { module: true },
+            },
+          },
         },
       },
     });
 
-    if (!membership) {
+    if (!membership)
       return errorResponse(res, "User not found", 404);
-    }
 
-    return successResponse(
-      res,
-      membership.userPermissions,
-      "User permissions fetched"
-    );
-  } catch (error) {
-    console.error("getUserPermissions error:", error);
+    const result = membership.userPermissions.map((up) => ({
+      module: up.permission.module.name,
+      action: up.permission.action,
+    }));
+
+    return successResponse(res, result, "User permissions fetched");
+  } catch (err) {
+    console.error(err);
     return errorResponse(res, "Internal server error", 500);
   }
-};
-
-module.exports = {
-  assignCrudPermissionsToUser,
-  removeCrudPermissionsFromUser,
-  getUserPermissions,
 };

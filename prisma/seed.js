@@ -1,73 +1,87 @@
+//////////////////////////////////////////////////////
+// LOAD ENV VARIABLES (VERY IMPORTANT)
+//////////////////////////////////////////////////////
 require("dotenv").config();
 
-const { Pool } = require("pg");
-const { PrismaPg } = require("@prisma/adapter-pg");
-const { PrismaClient } = require("../generated/prisma");
-
 //////////////////////////////////////////////////////
-// PRISMA CONNECTION
+// IMPORT YOUR PRISMA INSTANCE
 //////////////////////////////////////////////////////
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-  max: 5,
-  connectionTimeoutMillis: 5000,
-});
-
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
+const prisma = require("../src/config/prisma");
 
 //////////////////////////////////////////////////////
 // SEED FUNCTION
 //////////////////////////////////////////////////////
 async function main() {
-  const permissions = [
-    // CUSTOMER
-    { module: "customer", action: "read" },
-    { module: "customer", action: "create" },
-    { module: "customer", action: "update" },
-    { module: "customer", action: "delete" },
+  console.log("🌱 Seeding Modules & Permissions...");
 
-    // INVOICE
-    { module: "invoice", action: "read" },
-    { module: "invoice", action: "create" },
-    { module: "invoice", action: "update" },
-    { module: "invoice", action: "delete" },
-
-    // USER
-    { module: "user", action: "read" },
-    { module: "user", action: "create" },
-    { module: "user", action: "update" },
-    { module: "user", action: "delete" },
+  //////////////////////////////////////////////////////
+  // MODULE DEFINITIONS
+  //////////////////////////////////////////////////////
+  const modules = [
+    {
+      name: "invoice",
+      actions: ["create", "read", "update", "delete"],
+    },
+    {
+      name: "customer",
+      actions: ["create", "read", "update", "delete"],
+    },
+    {
+      name: "settings",
+      actions: ["create", "update"],
+    },
   ];
 
-  console.log("🌱 Seeding permissions...");
-
-  for (const p of permissions) {
-    await prisma.permission.upsert({
-      where: {
-        module_action: {
-          module: p.module,
-          action: p.action,
-        },
-      },
+  //////////////////////////////////////////////////////
+  // CREATE MODULES + PERMISSIONS
+  //////////////////////////////////////////////////////
+  for (const item of modules) {
+    ////////////////////////////////////////////////
+    // CREATE MODULE
+    ////////////////////////////////////////////////
+    const moduleRecord = await prisma.module.upsert({
+      where: { name: item.name },
       update: {},
-      create: p,
+      create: {
+        name: item.name,
+      },
     });
+
+    console.log(`✅ Module created: ${item.name}`);
+
+    ////////////////////////////////////////////////
+    // CREATE PERMISSIONS
+    ////////////////////////////////////////////////
+    for (const action of item.actions) {
+      await prisma.permission.upsert({
+        where: {
+          moduleId_action: {
+            moduleId: moduleRecord.id,
+            action,
+          },
+        },
+        update: {},
+        create: {
+          moduleId: moduleRecord.id,
+          action,
+        },
+      });
+
+      console.log(`   ↳ Permission added: ${action}`);
+    }
   }
 
-  console.log("✅ Permission seeding completed");
+  console.log("🎉 Modules & Permissions Seeded Successfully!");
 }
 
 //////////////////////////////////////////////////////
-// RUN
+// RUN SEED
 //////////////////////////////////////////////////////
 main()
-  .catch((e) => {
-    console.error("❌ Seed error:", e);
+  .catch((error) => {
+    console.error("❌ Seed Error:", error);
     process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();
-    await pool.end();
   });

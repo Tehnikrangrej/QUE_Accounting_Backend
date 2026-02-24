@@ -111,15 +111,26 @@
 
   model Permission {
     id        String @id @default(uuid())
-    module    String // "invoice"
+    moduleId String
+     module    Module   @relation(fields: [moduleId], references: [id])
     action    String // "create", "read", "update", "delete"
 
     rolePermissions RolePermission[]
     userPermissions UserPermission[]
 
-    @@unique([module, action]) // prevents duplicates
+    @@unique([moduleId, action]) // prevents duplicates
     @@map("permissions")
   }
+
+      //MODULE ///
+   model Module {
+  id          String @id @default(uuid())
+  name        String @unique
+
+  permissions Permission[]
+
+  @@map("modules")
+}
 
   //////////////////////////////////////////////////////
   // ROLE -> PERMISSION

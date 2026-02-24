@@ -41,7 +41,7 @@ exports.login = async (req, res) => {
     const { email, password } = req.body;
 
     //////////////////////////////////////////////////////
-    // ⭐ SUBSCRIPTION ADMIN LOGIN (ENV BASED)
+    // ⭐ SUBSCRIPTION ADMIN LOGIN
     //////////////////////////////////////////////////////
     if (
       email === process.env.SUBSCRIPTION_ADMIN_EMAIL &&
@@ -50,24 +50,27 @@ exports.login = async (req, res) => {
       const token = generateToken({
         userId: "subscription-admin",
         email,
-        role: "SUPER_ADMIN", // ✅ IMPORTANT FIX
+        role: "SUPER_ADMIN",
         isActive: true,
-        isSubscriptionAdmin: true, // ✅ special flag
+        isSubscriptionAdmin: true,
       });
 
       return res.json({
         success: true,
         token,
         businesses: [],
+        activeBusinessId: null,
       });
     }
 
     //////////////////////////////////////////////////////
-    // NORMAL USER LOGIN
+    // ⭐ NORMAL USER LOGIN
     //////////////////////////////////////////////////////
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { email },
-      include: { memberships: true },
+      include: {
+        memberships: true,
+      },
     });
 
     if (!user)
@@ -78,21 +81,58 @@ exports.login = async (req, res) => {
     if (!match)
       return res.status(400).json({ message: "Invalid credentials" });
 
+    //////////////////////////////////////////////////////
+    // ⭐ AUTO ACTIVATE BUSINESS ONLY FOR INVITED USERS
+    //////////////////////////////////////////////////////
+    if (!user.activeBusinessId) {
+
+      // check if user has been invited (membership exists)
+      const invitedMembership = await prisma.businessUser.findFirst({
+        where: {
+          userId: user.id,
+          isActive: true,
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
+      });
+
+      // only invited users get active business
+      if (invitedMembership) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            activeBusinessId: invitedMembership.businessId,
+          },
+          include: { memberships: true },
+        });
+      }
+    }
+
+    //////////////////////////////////////////////////////
+    // ⭐ GENERATE TOKEN
+    //////////////////////////////////////////////////////
     const token = generateToken({
       userId: user.id,
       email: user.email,
       role: user.role || "USER",
       isActive: user.isActive ?? true,
+      activeBusinessId: user.activeBusinessId,
     });
 
-    res.json({
+    //////////////////////////////////////////////////////
+    // RESPONSE
+    //////////////////////////////////////////////////////
+    return res.json({
       success: true,
       token,
       businesses: user.memberships,
+      activeBusinessId: user.activeBusinessId,
     });
 
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("Login error:", err);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 //////////////////////////////////////////////////////
