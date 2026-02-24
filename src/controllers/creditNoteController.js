@@ -104,3 +104,49 @@ exports.getCustomerCredits = async (req, res) => {
     return errorResponse(res, "Internal server error");
   }
 };
+//////////////////////////////////////////////////////
+// DOWNLOAD CREDIT NOTE PDF
+//////////////////////////////////////////////////////
+exports.downloadCreditNotePdf = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const credit = await prisma.creditNote.findUnique({
+      where: { id },
+      include: {
+        customer: true,
+        business: true,
+      },
+    });
+
+    if (!credit) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    ////////////////////////////////////////////////////
+    // CREATE HTML
+    ////////////////////////////////////////////////////
+    const html = template(
+      credit,
+      credit.business,
+      credit.customer
+    );
+
+    ////////////////////////////////////////////////////
+    // GENERATE PDF
+    ////////////////////////////////////////////////////
+    const filePath = await generatePdf(
+      html,
+      credit.creditNumber
+    );
+
+    ////////////////////////////////////////////////////
+    // DOWNLOAD
+    ////////////////////////////////////////////////////
+    return res.download(filePath);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "PDF generation failed" });
+  }
+};
