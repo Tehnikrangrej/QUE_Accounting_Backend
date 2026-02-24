@@ -8,19 +8,30 @@ const checkPermission = (moduleName, action) => {
       const userId = req.user.userId || req.user.id;
       const businessId = req.business.id;
 
-      console.log("CHECK:", moduleName, action);
-      console.log("USER:", userId);
-      console.log("BUSINESS:", businessId);
+      ////////////////////////////////////////////////////
+      // 1️⃣ BUSINESS OWNER BYPASS (FULL ACCESS)
+      ////////////////////////////////////////////////////
+      const business = await prisma.business.findUnique({
+        where: { id: businessId },
+        select: { ownerId: true },
+      });
 
+      if (business.ownerId === userId) {
+        return next(); // ✅ OWNER CAN DO EVERYTHING
+      }
+
+      ////////////////////////////////////////////////////
+      // 2️⃣ NORMAL USER PERMISSION CHECK
+      ////////////////////////////////////////////////////
       const permission = await prisma.userPermission.findFirst({
         where: {
           businessUser: {
-            userId: userId,
-            businessId: businessId,
+            userId,
+            businessId,
             isActive: true,
           },
           permission: {
-            action: action,
+            action,
             module: {
               name: moduleName,
             },

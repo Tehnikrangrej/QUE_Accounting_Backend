@@ -30,6 +30,10 @@ async function main() {
       name: "settings",
       actions: ["create", "update"],
     },
+    {
+        name: "payment",
+        actions: ["create", "read"],
+    }
   ];
 
   //////////////////////////////////////////////////////

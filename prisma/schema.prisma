@@ -63,6 +63,7 @@
 
     @@map("businesses")
     settings Settings[]
+    payments Payment[]
 }
 
   //////////////////////////////////////////////////////
@@ -272,7 +273,8 @@ model Customer {
     @@unique([businessId, invoiceNumber]) // invoice numbers unique per business
     @@index([businessId])
     @@map("invoices")
-  }
+      payments Payment[]
+}
   enum CreatorType {
     Admin
     USER
@@ -357,4 +359,38 @@ model Settings {
   defaultTerms      String?
 
   users User[]
+}
+
+//////////////////////////////////////////////////////
+// PAYMENTS
+//////////////////////////////////////////////////////
+
+model Payment {
+  id            String   @id @default(uuid())
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+  invoiceId     String
+  businessId    String
+
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  business      Business @relation(fields: [businessId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // PAYMENT DETAILS
+  //////////////////////////////////////////////////////
+  amount        Float
+  paymentDate   DateTime
+  paymentMode   String
+  transactionId String?
+  note          String?
+
+  //////////////////////////////////////////////////////
+  // META
+  //////////////////////////////////////////////////////
+  createdAt     DateTime @default(now())
+
+  @@index([invoiceId])
+  @@map("payments")
 }
