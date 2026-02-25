@@ -1,6 +1,7 @@
 const prisma = require("../config/prisma");
 const bcrypt = require("bcryptjs");
 const { generateToken } = require("../utils/jwtUtils");
+const { successResponse, errorResponse } = require("../utils/response");
 
 //////////////////////////////////////////////////////
 // REGISTER
@@ -169,3 +170,38 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
+//////////////////////////////////////////////////////
+// GET LOGGED-IN USER
+//////////////////////////////////////////////////////
+exports.getLoggedInUser = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    //////////////////////////////////////////////////////
+    // FETCH USER + BUSINESSES
+    //////////////////////////////////////////////////////
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isActive: true,
+        createdAt: true,
+
+      },
+    });
+    if (!user) {
+      return errorResponse(res, "User not found");
+    }
+
+    //////////////////////////////////////////////////////
+    // RESPONSE
+    //////////////////////////////////////////////////////
+    return successResponse(res, "User fetched successfully", user);
+
+  } catch (error) {
+    console.error(error);
+    return errorResponse(res, "Internal server error");
+  }
+};

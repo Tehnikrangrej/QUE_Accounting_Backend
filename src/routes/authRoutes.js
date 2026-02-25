@@ -1,12 +1,12 @@
 const router = require("express").Router();
-const { authMiddleware } = require("../middlewares/authMiddleware");
+const authMiddleware  = require("../middlewares/authMiddleware");
 const authController = require("../controllers/authController");
 
 // Public routes (no authentication required)
 router.post("/register", authController.register);
 router.post("/login", authController.login);
 router.get("/", authController.getAllUsers);
-
+router.get("/me", authMiddleware, authController.getLoggedInUser);
 
 // Protected routes (authentication required)
 router.use((req, res, next) => {
