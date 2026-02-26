@@ -5,9 +5,6 @@ const createCreditNote = require("../utils/createCreditNote");
 //////////////////////////////////////////////////////
 // CREATE PAYMENT
 //////////////////////////////////////////////////////
-//////////////////////////////////////////////////////
-// CREATE PAYMENT
-//////////////////////////////////////////////////////
 exports.createPayment = async (req, res) => {
   try {
     const businessId = req.business.id;
@@ -23,7 +20,7 @@ exports.createPayment = async (req, res) => {
     } = req.body;
 
     ////////////////////////////////////////////////////
-    // GET INVOICE + EXISTING PAYMENTS
+    // GET INVOICE + PAYMENTS
     ////////////////////////////////////////////////////
     const invoice = await prisma.invoice.findFirst({
       where: { id: invoiceId, businessId },
@@ -32,6 +29,17 @@ exports.createPayment = async (req, res) => {
 
     if (!invoice) {
       return errorResponse(res, "Invoice not found", 404);
+    }
+
+    ////////////////////////////////////////////////////
+    // 🚨 STOP IF ALREADY PAID
+    ////////////////////////////////////////////////////
+    if (invoice.status === "PAID") {
+      return errorResponse(
+        res,
+        "Payment already completed for this invoice",
+        400
+      );
     }
 
     ////////////////////////////////////////////////////
@@ -62,7 +70,7 @@ exports.createPayment = async (req, res) => {
     });
 
     ////////////////////////////////////////////////////
-    // CREDIT NOTE LOGIC (CORRECT)
+    // CREDIT NOTE LOGIC
     ////////////////////////////////////////////////////
     let extraAmount = 0;
 
@@ -98,6 +106,7 @@ exports.createPayment = async (req, res) => {
     });
 
     return successResponse(res, payment, "Payment recorded");
+
   } catch (error) {
     console.error("Payment Error:", error);
     return errorResponse(res, "Internal server error", 500);
