@@ -6,22 +6,44 @@ const { successResponse, errorResponse } = require("../utils/response");
 //////////////////////////////////////////////////////
 exports.getAllModules = async (req, res) => {
   try {
+    //////////////////////////////////////////////////
+    // FETCH MODULES
+    //////////////////////////////////////////////////
     const modules = await prisma.module.findMany({
       include: {
-        permissions: true,
+        permissions: {
+          select: {
+            action: true,
+          },
+        },
       },
       orderBy: {
         name: "asc",
       },
     });
 
-    return successResponse(res, modules, "Modules fetched successfully");
+    //////////////////////////////////////////////////
+    // FORMAT RESPONSE
+    //////////////////////////////////////////////////
+    const formattedModules = modules.map((module) => ({
+      id: module.id,
+      name: module.name,
+      actions: module.permissions.map((p) => p.action),
+    }));
+
+    //////////////////////////////////////////////////
+    // RESPONSE
+    //////////////////////////////////////////////////
+    return successResponse(
+      res,
+      formattedModules,
+      "Modules fetched successfully"
+    );
   } catch (error) {
     console.error(error);
     return errorResponse(res, "Failed to fetch modules");
   }
 };
-
 //////////////////////////////////////////////////////
 // CREATE MODULE
 //////////////////////////////////////////////////////

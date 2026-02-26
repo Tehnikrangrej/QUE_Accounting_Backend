@@ -128,7 +128,7 @@
    model Module {
   id          String @id @default(uuid())
   name        String @unique
-
+  
   permissions Permission[]
 
   @@map("modules")
