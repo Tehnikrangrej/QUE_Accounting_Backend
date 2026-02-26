@@ -1,49 +1,5 @@
 const prisma = require("../config/prisma");
-const { successResponse, errorResponse } = require("../utils/response");
 
-//////////////////////////////////////////////////////
-// GET ALL MODULES
-//////////////////////////////////////////////////////
-exports.getAllModules = async (req, res) => {
-  try {
-    //////////////////////////////////////////////////
-    // FETCH MODULES
-    //////////////////////////////////////////////////
-    const modules = await prisma.module.findMany({
-      include: {
-        permissions: {
-          select: {
-            action: true,
-          },
-        },
-      },
-      orderBy: {
-        name: "asc",
-      },
-    });
-
-    //////////////////////////////////////////////////
-    // FORMAT RESPONSE
-    //////////////////////////////////////////////////
-    const formattedModules = modules.map((module) => ({
-      id: module.id,
-      name: module.name,
-      actions: module.permissions.map((p) => p.action),
-    }));
-
-    //////////////////////////////////////////////////
-    // RESPONSE
-    //////////////////////////////////////////////////
-    return successResponse(
-      res,
-      formattedModules,
-      "Modules fetched successfully"
-    );
-  } catch (error) {
-    console.error(error);
-    return errorResponse(res, "Failed to fetch modules");
-  }
-};
 //////////////////////////////////////////////////////
 // CREATE MODULE
 //////////////////////////////////////////////////////
@@ -52,35 +8,190 @@ exports.createModule = async (req, res) => {
     const { name, actions } = req.body;
 
     if (!name || !actions?.length) {
-      return errorResponse(res, "Name and actions required");
+      return res.status(400).json({
+        success: false,
+        message: "Name and actions required",
+      });
     }
 
-    ////////////////////////////////////////////////
-    // CREATE MODULE
-    ////////////////////////////////////////////////
-    const moduleRecord = await prisma.module.create({
+    const module = await prisma.module.create({
       data: { name },
     });
 
-    ////////////////////////////////////////////////
-    // CREATE PERMISSIONS
-    ////////////////////////////////////////////////
     await prisma.permission.createMany({
-      data: actions.map((action) => ({
-        moduleId: moduleRecord.id,
+      data: actions.map(action => ({
+        moduleId: module.id,
         action,
       })),
       skipDuplicates: true,
     });
 
-    const result = await prisma.module.findUnique({
-      where: { id: moduleRecord.id },
+    return res.json({
+      success: true,
+      message: "Module created successfully",
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Create module failed",
+    });
+  }
+};
+
+//////////////////////////////////////////////////////
+// GET ALL MODULES
+//////////////////////////////////////////////////////
+exports.getModules = async (req, res) => {
+  try {
+
+    const modules = await prisma.module.findMany({
+      include: {
+        permissions: {
+          select: { action: true },
+        },
+      },
+      orderBy: { name: "asc" },
+    });
+
+    const formatted = modules.map(m => ({
+      id: m.id,
+      name: m.name,
+      actions: m.permissions.map(p => p.action),
+    }));
+
+    res.json({
+      success: true,
+      data: formatted,
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Fetch modules failed",
+    });
+  }
+};
+
+//////////////////////////////////////////////////////
+// UPDATE MODULE
+//////////////////////////////////////////////////////
+exports.updateModule = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, actions } = req.body;
+
+    //////////////////////////////////////////////////
+    // GET MODULE WITH PERMISSIONS
+    //////////////////////////////////////////////////
+    const moduleData = await prisma.module.findUnique({
+      where: { id },
       include: { permissions: true },
     });
 
-    return successResponse(res, result, "Module created successfully");
+    if (!moduleData) {
+      return res.status(404).json({
+        success: false,
+        message: "Module not found",
+      });
+    }
+
+    const permissionIds = moduleData.permissions.map(p => p.id);
+
+    //////////////////////////////////////////////////
+    // UPDATE NAME (OPTIONAL)
+    //////////////////////////////////////////////////
+    if (name) {
+      await prisma.module.update({
+        where: { id },
+        data: { name },
+      });
+    }
+
+    //////////////////////////////////////////////////
+    // UPDATE ACTIONS
+    //////////////////////////////////////////////////
+    if (actions?.length) {
+
+      ////////////////////////////////////////////////
+      // ⭐ DELETE USER PERMISSIONS (IF EXISTS)
+      ////////////////////////////////////////////////
+      await prisma.userPermission.deleteMany({
+        where: {
+          permissionId: { in: permissionIds },
+        },
+      });
+
+      ////////////////////////////////////////////////
+      // ⭐ DELETE ROLE PERMISSIONS
+      ////////////////////////////////////////////////
+      await prisma.rolePermission.deleteMany({
+        where: {
+          permissionId: { in: permissionIds },
+        },
+      });
+
+      ////////////////////////////////////////////////
+      // DELETE OLD PERMISSIONS
+      ////////////////////////////////////////////////
+      await prisma.permission.deleteMany({
+        where: {
+          id: { in: permissionIds },
+        },
+      });
+
+      ////////////////////////////////////////////////
+      // CREATE NEW PERMISSIONS
+      ////////////////////////////////////////////////
+      await prisma.permission.createMany({
+        data: actions.map(action => ({
+          moduleId: id,
+          action,
+        })),
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Module updated successfully",
+    });
+
+  } catch (error) {
+    console.error("UPDATE MODULE ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Update failed",
+    });
+  }
+};
+//////////////////////////////////////////////////////
+// DELETE MODULE
+//////////////////////////////////////////////////////
+exports.deleteModule = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await prisma.permission.deleteMany({
+      where: { moduleId: id },
+    });
+
+    await prisma.module.delete({
+      where: { id },
+    });
+
+    res.json({
+      success: true,
+      message: "Module deleted successfully",
+    });
+
   } catch (error) {
     console.error(error);
-    return errorResponse(res, "Failed to create module");
+    res.status(500).json({
+      success: false,
+      message: "Delete failed",
+    });
   }
 };

@@ -1,13 +1,40 @@
 const router = require("express").Router();
+
 const authMiddleware = require("../middlewares/authMiddleware");
+const subscriptionAdminOnly = require("../middlewares/subscriptionAdminOnly");
+
 const moduleController = require("../controllers/module.controller");
 
 //////////////////////////////////////////////////////
-// MODULE ROUTES
+// MODULE CRUD (SUBSCRIPTION ADMIN ONLY)
 //////////////////////////////////////////////////////
 
-router.get("/", authMiddleware, moduleController.getAllModules);
+router.post(
+  "/",
+  authMiddleware,
+  subscriptionAdminOnly,
+  moduleController.createModule
+);
 
-router.post("/", authMiddleware, moduleController.createModule);
+router.get(
+  "/",
+  authMiddleware,
+  subscriptionAdminOnly,
+  moduleController.getModules
+);
+
+router.put(
+  "/:id",
+  authMiddleware,
+  subscriptionAdminOnly,
+  moduleController.updateModule
+);
+
+router.delete(
+  "/:id",
+  authMiddleware,
+  subscriptionAdminOnly,
+  moduleController.deleteModule
+);
 
 module.exports = router;
