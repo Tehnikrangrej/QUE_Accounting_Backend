@@ -222,3 +222,59 @@ exports.downloadPaymentPdf = async (req, res) => {
     });
   }
 };
+// GET ALL PAYMENTS
+//////////////////////////////////////////////////////
+exports.getPayments = async (req, res) => {
+  try {
+    const businessId = req.business.id;
+    const { page = 1, limit = 10 } = req.query;
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const payments = await prisma.payment.findMany({
+      where: { businessId },
+      include: {
+        invoice: {
+          select: {
+            id: true,
+            invoiceNumber: true,
+            customer: {
+              select: {
+                company: true,
+              },
+            },
+
+            //////////////////////////////////////////////////
+            // ⭐ CREDIT NOTES FROM INVOICE
+            //////////////////////////////////////////////////
+            creditNotes: {
+              select: {
+                id: true,
+                creditNumber: true,
+                amount: true,
+                status: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      skip,
+      take: Number(limit),
+    });
+
+    res.json({
+      success: true,
+      data: payments,
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch payments",
+    });
+  }
+};

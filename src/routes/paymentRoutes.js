@@ -16,6 +16,13 @@ router.post(
   controller.createPayment
 );
 
+router.get(
+  "/",
+  auth,
+  business,
+  checkPermission("payment", "read"),
+  controller.getPayments
+);
 //////////////////////////////////////////////////
 // READ PAYMENTS
 //////////////////////////////////////////////////

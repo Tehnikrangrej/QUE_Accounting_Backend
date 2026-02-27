@@ -387,6 +387,9 @@ model Payment {
   transactionId String?
   note          String?
   pdfUrl        String?
+
+  creditNoteId String?
+  creditNote   CreditNote? @relation(fields: [creditNoteId], references: [id])  
   //////////////////////////////////////////////////////
   // META
   //////////////////////////////////////////////////////
@@ -430,6 +433,7 @@ model CreditNote {
 
   @@index([businessId])
   @@index([customerId])
+  payments Payment[]
 }
 
 enum CreditNoteStatus {
