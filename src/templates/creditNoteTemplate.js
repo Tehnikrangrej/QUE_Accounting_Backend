@@ -1,64 +1,81 @@
 module.exports = (credit) => {
 
-  const amount = Number(credit.amount || 0);
+  const customer = credit.customer;
+  const overpaid = Number(credit.amount || 0);
 
-  const date = credit.createdAt
-    ? new Date(credit.createdAt).toISOString().split("T")[0]
-    : "";
+  // 5% weight deduction
+  const weight = overpaid * 0.05;
+  const subTotal = overpaid - weight;
+
+  const date = new Date(credit.createdAt)
+    .toISOString()
+    .split("T")[0];
+
+  //////////////////////////////////////////////////////
+  // SINGLE BLANK ITEM ROW (Qty = 1)
+  //////////////////////////////////////////////////////
+  const rows = `
+      <tr>
+        <td>1</td>
+        <td></td>
+        <td>1</td>
+        <td>${overpaid.toFixed(2)}</td>
+        <td>${overpaid.toFixed(2)}</td>
+      </tr>
+  `;
 
   return `
-  <html>
-  <body style="font-family:Arial;padding:40px">
+<html>
+<head>
+<style>
+body{font-family:Arial;padding:40px;color:#333;}
+.header{text-align:right;}
+table{width:100%;border-collapse:collapse;margin-top:30px;}
+th{background:#2f3b4c;color:#fff;padding:8px;}
+td{padding:8px;border-bottom:1px solid #ddd;text-align:center;}
+td:nth-child(2){text-align:left;}
+.totals{width:300px;margin-left:auto;margin-top:20px;}
+</style>
+</head>
 
-    <div style="text-align:right">
-      <h2>CREDIT NOTE</h2>
-      <div># ${credit.creditNumber || "-"}</div>
-      <div>${credit.status || ""}</div>
-    </div>
+<body>
 
-    <div style="margin-top:40px">
-      <h3>Bill To</h3>
-      ${credit.customer?.companyName || ""}
-    </div>
+<div class="header">
+<h2>CREDIT NOTE</h2>
+<div># ${credit.creditNumber}</div>
+<div>Credit Note Date: ${date}</div>
+</div>
 
-    <p><b>Credit Note Date:</b> ${date}</p>
+<h3>Bill To</h3>
+${customer?.companyName || ""}
 
-    <table width="100%" border="0" cellspacing="0" cellpadding="8">
-      <thead style="background:#2f3b4c;color:white">
-        <tr>
-          <th>#</th>
-          <th>Description</th>
-          <th>Qty</th>
-          <th>Rate</th>
-          <th>Amount</th>
-        </tr>
-      </thead>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>Qty</th>
+<th>Rate</th>
+<th>Amount</th>
+</tr>
+</thead>
 
-      <tbody>
-        <tr>
-          <td>1</td>
-          <td>${credit.reason}</td>
-          <td>1</td>
-          <td>${amount.toFixed(2)}</td>
-          <td>${amount.toFixed(2)}</td>
-        </tr>
-      </tbody>
-    </table>
+<tbody>
+${rows}
+</tbody>
+</table>
 
-    <div style="width:300px;margin-left:auto;margin-top:30px">
-      <div>Sub Total ${amount.toFixed(2)}</div>
-      <div>Tax 0.00</div>
-      <div><b>Total ${amount.toFixed(2)}</b></div>
-      <div>Credits Remaining ${Number(
-        credit.remainingAmount || 0
-      ).toFixed(2)}</div>
-    </div>
+<div class="totals">
+<div>Total Overpaid: ${overpaid.toFixed(2)}</div>
+<div>Weight (5%): ${weight.toFixed(2)}</div>
+<div><b>Sub Total: ${subTotal.toFixed(2)}</b></div>
+<div>Credits Remaining: ${subTotal.toFixed(2)}</div>
+</div>
 
-    <div style="margin-top:60px">
-      Authorized Signature ____________________
-    </div>
+<br/><br/>
+Authorized Signature ___________________
 
-  </body>
-  </html>
-  `;
+</body>
+</html>
+`;
 };

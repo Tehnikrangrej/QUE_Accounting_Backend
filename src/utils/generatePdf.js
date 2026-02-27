@@ -1,12 +1,10 @@
 const puppeteer = require("puppeteer");
-const template = require("../templates/creditNoteTemplate");
 
-module.exports = async (creditNote, business, customer) => {
-
-  const html = template(creditNote, business, customer);
+module.exports = async (html) => {
 
   const browser = await puppeteer.launch({
-    headless: "new",
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
   const page = await browser.newPage();
@@ -15,6 +13,9 @@ module.exports = async (creditNote, business, customer) => {
     waitUntil: "networkidle0",
   });
 
+  //////////////////////////////////////////////////////
+  // RETURN BUFFER (NOT FILE)
+  //////////////////////////////////////////////////////
   const pdfBuffer = await page.pdf({
     format: "A4",
     printBackground: true,

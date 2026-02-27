@@ -30,6 +30,7 @@ exports.createPayment = async (req, res) => {
       include: {
         payments: true,
         customer: true,
+        items: true,
       },
     });
 

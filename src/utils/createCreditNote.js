@@ -38,7 +38,11 @@ module.exports = async ({ invoice, businessId, extraAmount }) => {
       where: { id: credit.id },
       include: {
         customer: true,
-        invoice: true,
+        invoice: {
+          include:{
+            items: true,
+            },
+        },
       },
     });
 
