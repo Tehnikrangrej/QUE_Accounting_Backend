@@ -27,4 +27,12 @@ router.get(
   controller.getInvoicePayments
 );
 
+router.get(
+  "/:paymentId/download",
+  auth,
+  business,
+  checkPermission("payment", "read"),
+  controller.downloadPaymentPdf
+);
+
 module.exports = router;

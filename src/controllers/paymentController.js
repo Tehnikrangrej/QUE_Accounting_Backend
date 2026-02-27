@@ -2,6 +2,9 @@ const prisma = require("../config/prisma");
 const { successResponse, errorResponse } = require("../utils/response");
 const createCreditNote = require("../utils/createCreditNote");
 
+const generatePaymentPdf = require("../utils/generatePaymentPdf");
+const uploadPaymentPdf = require("../utils/uploadPaymentPdf");
+
 //////////////////////////////////////////////////////
 // CREATE PAYMENT
 //////////////////////////////////////////////////////
@@ -20,11 +23,14 @@ exports.createPayment = async (req, res) => {
     } = req.body;
 
     ////////////////////////////////////////////////////
-    // GET INVOICE + PAYMENTS
+    // GET FULL INVOICE WITH PAYMENTS + CUSTOMER
     ////////////////////////////////////////////////////
     const invoice = await prisma.invoice.findFirst({
       where: { id: invoiceId, businessId },
-      include: { payments: true },
+      include: {
+        payments: true,
+        customer: true,
+      },
     });
 
     if (!invoice) {
@@ -32,26 +38,15 @@ exports.createPayment = async (req, res) => {
     }
 
     ////////////////////////////////////////////////////
-    // 🚨 STOP IF ALREADY PAID
-    ////////////////////////////////////////////////////
-    if (invoice.status === "PAID") {
-      return errorResponse(
-        res,
-        "Payment already completed for this invoice",
-        400
-      );
-    }
-
-    ////////////////////////////////////////////////////
     // CALCULATE PREVIOUS PAYMENTS
     ////////////////////////////////////////////////////
     const previousPaid = invoice.payments.reduce(
-      (sum, p) => sum + p.amount,
+      (sum, p) => sum + Number(p.amount),
       0
     );
 
     const remainingBeforePayment =
-      invoice.grandTotal - previousPaid;
+      Number(invoice.grandTotal) - previousPaid;
 
     ////////////////////////////////////////////////////
     // CREATE PAYMENT
@@ -60,7 +55,7 @@ exports.createPayment = async (req, res) => {
       data: {
         invoiceId,
         businessId,
-        amount,
+        amount: Number(amount),
         createdBy: userId,
         paymentDate: new Date(paymentDate),
         paymentMode,
@@ -70,31 +65,30 @@ exports.createPayment = async (req, res) => {
     });
 
     ////////////////////////////////////////////////////
-    // CREDIT NOTE LOGIC
+    // CREDIT NOTE LOGIC (CORRECT FORMULA)
     ////////////////////////////////////////////////////
-    let extraAmount = 0;
+    let creditNote = null;
 
-    if (amount > remainingBeforePayment) {
-      extraAmount = amount - remainingBeforePayment;
+    if (Number(amount) > remainingBeforePayment) {
+      const extraAmount =
+        Number(amount) - remainingBeforePayment;
+
+      creditNote = await createCreditNote({
+        invoice, // full invoice with customer
+        businessId,
+        extraAmount,
+      });
     }
-
-    if (extraAmount > 0) {
-      await createCreditNote(invoice, extraAmount);
-    }
-
-    ////////////////////////////////////////////////////
-    // CALCULATE NEW TOTAL PAID
-    ////////////////////////////////////////////////////
-    const newTotalPaid = previousPaid + amount;
 
     ////////////////////////////////////////////////////
     // UPDATE INVOICE STATUS
     ////////////////////////////////////////////////////
+    const newTotalPaid =
+      previousPaid + Number(amount);
+
     let status = "UNPAID";
 
-    if (newTotalPaid === 0) {
-      status = "UNPAID";
-    } else if (newTotalPaid < invoice.grandTotal) {
+    if (newTotalPaid < invoice.grandTotal) {
       status = "PARTIALLY_PAID";
     } else {
       status = "PAID";
@@ -105,13 +99,72 @@ exports.createPayment = async (req, res) => {
       data: { status },
     });
 
-    return successResponse(res, payment, "Payment recorded");
+    ////////////////////////////////////////////////////
+    // REFRESH INVOICE AFTER PAYMENT
+    ////////////////////////////////////////////////////
+    const updatedInvoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        payments: true,
+        customer: true,
+      },
+    });
+
+    ////////////////////////////////////////////////////
+    // GENERATE PAYMENT PDF (USING UPDATED DATA)
+    ////////////////////////////////////////////////////
+    let finalPayment = payment;
+
+    try {
+      const settings = await prisma.settings.findUnique({
+        where: { businessId },
+      });
+
+      const pdfBuffer = await generatePaymentPdf(
+        payment,
+        updatedInvoice,
+        settings
+      );
+
+      const pdfUrl = await uploadPaymentPdf(
+        pdfBuffer,
+        payment.id
+      );
+
+      finalPayment = await prisma.payment.update({
+        where: { id: payment.id },
+        data: { pdfUrl },
+      });
+
+    } catch (pdfError) {
+      console.error("Payment PDF generation failed:", pdfError);
+    }
+
+    ////////////////////////////////////////////////////
+    // RESPONSE
+    ////////////////////////////////////////////////////
+    return successResponse(
+      res,
+      {
+        payment: finalPayment,
+        creditNote: creditNote
+          ? {
+              ...creditNote,
+              downloadUrl: `${req.protocol}://${req.get(
+                "host"
+              )}/api/credit-notes/${creditNote.id}/download`,
+            }
+          : null,
+      },
+      "Payment recorded"
+    );
 
   } catch (error) {
     console.error("Payment Error:", error);
     return errorResponse(res, "Internal server error", 500);
   }
 };
+
 //////////////////////////////////////////////////////
 // GET PAYMENTS BY INVOICE
 //////////////////////////////////////////////////////
@@ -120,13 +173,51 @@ exports.getInvoicePayments = async (req, res) => {
     const { invoiceId } = req.params;
 
     const payments = await prisma.payment.findMany({
-      where: { invoiceId },
+      where: {
+        invoiceId,
+        businessId: req.business.id,
+      },
       orderBy: { createdAt: "desc" },
     });
 
     return successResponse(res, payments);
+
   } catch (err) {
     console.error(err);
     return errorResponse(res, "Internal server error", 500);
+  }
+};
+
+//////////////////////////////////////////////////////
+// DOWNLOAD PAYMENT PDF
+//////////////////////////////////////////////////////
+exports.downloadPaymentPdf = async (req, res) => {
+  try {
+    const payment = await prisma.payment.findFirst({
+      where: {
+        id: req.params.id,
+        businessId: req.business.id,
+      },
+    });
+
+    if (!payment?.pdfUrl) {
+      return res.status(404).json({
+        success: false,
+        message: "PDF not found",
+      });
+    }
+
+    const downloadUrl = payment.pdfUrl.replace(
+      "/upload/",
+      "/upload/fl_attachment/"
+    );
+
+    return res.redirect(downloadUrl);
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };

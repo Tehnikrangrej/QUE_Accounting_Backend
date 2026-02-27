@@ -2,35 +2,50 @@ const prisma = require("../config/prisma");
 const { successResponse, errorResponse } = require("../utils/response");
 
 //////////////////////////////////////////////////////
-// GET ALL CREDIT NOTES (OWNER ONLY)
+// GET ALL CREDIT NOTES
 //////////////////////////////////////////////////////
-exports.getCreditNotes = async (req, res) => {
+exports.getAllCreditNotes = async (req, res) => {
   try {
     const businessId = req.business.id;
-    const userId = req.user.userId || req.user.id;
-
-    const business = await prisma.business.findUnique({
-      where: { id: businessId },
-      select: { ownerId: true },
-    });
-
-    if (business.ownerId !== userId) {
-      return errorResponse(res, "Only owner can view all credits", 403);
-    }
 
     const credits = await prisma.creditNote.findMany({
       where: { businessId },
       include: {
         customer: true,
-        invoice: true,
+        invoice: {
+          select: {
+            id: true,
+            invoiceNumber: true,
+            grandTotal: true,
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
     });
 
-    return successResponse(res, credits);
-  } catch (err) {
-    console.error(err);
-    return errorResponse(res, "Internal server error");
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+
+    const formatted = credits.map((credit) => ({
+      id: credit.id,
+      creditNumber: credit.creditNumber,
+      amount: credit.amount,
+      remainingAmount: credit.remainingAmount,
+      status: credit.status,
+        pdfUrl: credit.pdfUrl || null,
+      createdAt: credit.createdAt,
+      customer: credit.customer,
+      invoice: credit.invoice,
+    
+      downloadUrl: credit.pdfUrl
+        ? `${baseUrl}/api/credit-notes/${credit.id}/download`
+        : null,
+    }));
+
+    return successResponse(res, formatted);
+
+  } catch (error) {
+    console.error("Get All Credit Notes Error:", error);
+    return errorResponse(res, "Internal server error", 500);
   }
 };
 
@@ -39,114 +54,72 @@ exports.getCreditNotes = async (req, res) => {
 //////////////////////////////////////////////////////
 exports.getCreditNote = async (req, res) => {
   try {
+    const businessId = req.business.id;
     const { id } = req.params;
 
-    const credit = await prisma.creditNote.findUnique({
-      where: { id },
+    const credit = await prisma.creditNote.findFirst({
+      where: { id, businessId },
       include: {
         customer: true,
-        invoice: true,
-      },
-    });
-
-    return successResponse(res, credit);
-  } catch (err) {
-    console.error(err);
-    return errorResponse(res, "Internal server error");
-  }
-};
-
-//////////////////////////////////////////////////////
-// GET CREDIT NOTES BY CUSTOMER
-//////////////////////////////////////////////////////
-exports.getCustomerCredits = async (req, res) => {
-  try {
-    const businessId = req.business.id;
-    const userId = req.user.userId || req.user.id;
-    const { customerId } = req.params;
-
-    const business = await prisma.business.findUnique({
-      where: { id: businessId },
-      select: { ownerId: true },
-    });
-
-    ////////////////////////////////////////////////////
-    // OWNER → ALL CUSTOMER CREDITS
-    ////////////////////////////////////////////////////
-    if (business.ownerId === userId) {
-      const credits = await prisma.creditNote.findMany({
-        where: { businessId, customerId },
-      });
-
-      return successResponse(res, credits);
-    }
-
-    ////////////////////////////////////////////////////
-    // PAYMENT CREATOR ONLY
-    ////////////////////////////////////////////////////
-    const credits = await prisma.creditNote.findMany({
-      where: {
-        businessId,
-        customerId,
         invoice: {
-          payments: {
-            some: {
-              createdBy: userId,
-            },
+          include: {
+            customer: true,
           },
         },
       },
     });
 
-    return successResponse(res, credits);
-  } catch (err) {
-    console.error(err);
-    return errorResponse(res, "Internal server error");
+    if (!credit) {
+      return errorResponse(res, "Credit note not found", 404);
+    }
+
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+
+    return successResponse(res, {
+      ...credit,
+      downloadUrl: credit.pdfUrl
+        ? `${baseUrl}/api/credit-notes/${credit.id}/download`
+        : null,
+    });
+
+  } catch (error) {
+    console.error("Get Credit Note Error:", error);
+    return errorResponse(res, "Internal server error", 500);
   }
 };
+
 //////////////////////////////////////////////////////
 // DOWNLOAD CREDIT NOTE PDF
 //////////////////////////////////////////////////////
 exports.downloadCreditNotePdf = async (req, res) => {
   try {
+    const businessId = req.business.id;
     const { id } = req.params;
 
-    const credit = await prisma.creditNote.findUnique({
-      where: { id },
-      include: {
-        customer: true,
-        business: true,
+    const credit = await prisma.creditNote.findFirst({
+      where: { id, businessId },
+      select: {
+        pdfUrl: true,
+        creditNumber: true,
       },
     });
 
-    if (!credit) {
-      return res.status(404).json({ message: "Not found" });
+    if (!credit || !credit.pdfUrl) {
+      return errorResponse(res, "PDF not found", 404);
     }
 
     ////////////////////////////////////////////////////
-    // CREATE HTML
+    // Cloudinary Force Download
     ////////////////////////////////////////////////////
-    const html = template(
-      credit,
-      credit.business,
-      credit.customer
+    const downloadUrl = credit.pdfUrl.replace(
+      "/upload/",
+      "/upload/fl_attachment/"
     );
 
-    ////////////////////////////////////////////////////
-    // GENERATE PDF
-    ////////////////////////////////////////////////////
-    const filePath = await generatePdf(
-      html,
-      credit.creditNumber
-    );
+    return res.redirect(downloadUrl);
 
-    ////////////////////////////////////////////////////
-    // DOWNLOAD
-    ////////////////////////////////////////////////////
-    return res.download(filePath);
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "PDF generation failed" });
+  } catch (error) {
+    console.error("Download Credit Note Error:", error);
+    return errorResponse(res, "Download failed", 500);
   }
 };

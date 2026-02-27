@@ -1,9 +1,9 @@
 const puppeteer = require("puppeteer");
-const template = require("../templates/creditNoteTemplate");
+const template = require("../templates/paymentReceiptTemplate");
 
-module.exports = async (creditNote, business, customer) => {
+module.exports = async (payment, invoice, settings) => {
 
-  const html = template(creditNote, business, customer);
+  const html = template(payment, invoice, settings);
 
   const browser = await puppeteer.launch({
     headless: "new",

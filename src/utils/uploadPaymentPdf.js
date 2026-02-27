@@ -1,17 +1,22 @@
 const cloudinary = require("../config/cloudinary");
 
-module.exports = async (pdfBuffer, creditNoteNumber) => {
+module.exports = async (pdfBuffer, paymentId) => {
+
   return new Promise((resolve, reject) => {
 
     const stream = cloudinary.uploader.upload_stream(
       {
         resource_type: "raw",
-        folder: "credit-note-pdfs",
-        public_id: creditNoteNumber,
+        public_id: `payment-pdfs/payment-${paymentId}`,
         format: "pdf",
+        timeout: 600000, // ✅ 10 minutes
       },
       (error, result) => {
-        if (error) return reject(error);
+        if (error) {
+          console.error("Cloudinary Upload Error:", error);
+          return reject(error);
+        }
+
         resolve(result.secure_url);
       }
     );

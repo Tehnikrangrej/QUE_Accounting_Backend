@@ -1,34 +1,64 @@
-module.exports = (credit, business, customer) => `
-<html>
-<body style="font-family:Arial;padding:40px">
+module.exports = (credit) => {
 
-<h2>CREDIT NOTE</h2>
+  const amount = Number(credit.amount || 0);
 
-<p><b>${business.name}</b></p>
+  const date = credit.createdAt
+    ? new Date(credit.createdAt).toISOString().split("T")[0]
+    : "";
 
-<hr/>
+  return `
+  <html>
+  <body style="font-family:Arial;padding:40px">
 
-<p><b>Credit Number:</b> ${credit.creditNumber}</p>
-<p><b>Date:</b> ${new Date().toDateString()}</p>
+    <div style="text-align:right">
+      <h2>CREDIT NOTE</h2>
+      <div># ${credit.creditNumber || "-"}</div>
+      <div>${credit.status || ""}</div>
+    </div>
 
-<h3>Customer</h3>
-<p>${customer.company}</p>
+    <div style="margin-top:40px">
+      <h3>Bill To</h3>
+      ${credit.customer?.companyName || ""}
+    </div>
 
-<table border="1" width="100%" cellpadding="10">
-<tr>
-<th>Description</th>
-<th>Amount</th>
-</tr>
+    <p><b>Credit Note Date:</b> ${date}</p>
 
-<tr>
-<td>${credit.reason}</td>
-<td>${credit.amount}</td>
-</tr>
+    <table width="100%" border="0" cellspacing="0" cellpadding="8">
+      <thead style="background:#2f3b4c;color:white">
+        <tr>
+          <th>#</th>
+          <th>Description</th>
+          <th>Qty</th>
+          <th>Rate</th>
+          <th>Amount</th>
+        </tr>
+      </thead>
 
-</table>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>${credit.reason}</td>
+          <td>1</td>
+          <td>${amount.toFixed(2)}</td>
+          <td>${amount.toFixed(2)}</td>
+        </tr>
+      </tbody>
+    </table>
 
-<h2>Total Credit: ${credit.amount}</h2>
+    <div style="width:300px;margin-left:auto;margin-top:30px">
+      <div>Sub Total ${amount.toFixed(2)}</div>
+      <div>Tax 0.00</div>
+      <div><b>Total ${amount.toFixed(2)}</b></div>
+      <div>Credits Remaining ${Number(
+        credit.remainingAmount || 0
+      ).toFixed(2)}</div>
+    </div>
 
-</body>
-</html>
-`;
+    <div style="margin-top:60px">
+      Authorized Signature ____________________
+    </div>
+
+  </body>
+  </html>
+  `;
+};

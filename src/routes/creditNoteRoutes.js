@@ -13,7 +13,7 @@ router.get(
   "/",
   auth,
   businessMiddleware,
-  controller.getCreditNotes
+  controller.getAllCreditNotes
 );
 
 //////////////////////////////////////////////////////
@@ -27,14 +27,12 @@ router.get(
   controller.getCreditNote
 );
 
-//////////////////////////////////////////////////////
-// VIEW CREDIT NOTES BY CUSTOMER
-//////////////////////////////////////////////////////
 router.get(
-  "/customer/:customerId",
+  "/:id/download",
   auth,
   businessMiddleware,
-  controller.getCustomerCredits
-);
+  controller.downloadCreditNotePdf
+)
+
 
 module.exports = router;
