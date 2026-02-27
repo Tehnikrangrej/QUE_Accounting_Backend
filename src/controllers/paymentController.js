@@ -233,7 +233,21 @@ exports.getPayments = async (req, res) => {
 
     const payments = await prisma.payment.findMany({
       where: { businessId },
-      include: {
+
+      //////////////////////////////////////////////////
+      // ⭐ SELECT INSTEAD OF INCLUDE
+      //////////////////////////////////////////////////
+      select: {
+        id: true,
+        amount: true,
+        paymentDate: true,
+        paymentMode: true,
+        transactionId: true,
+        note: true,
+        pdfUrl: true,
+        createdBy: true,
+        createdAt: true,
+
         invoice: {
           select: {
             id: true,
@@ -244,9 +258,9 @@ exports.getPayments = async (req, res) => {
               },
             },
 
-            //////////////////////////////////////////////////
-            // ⭐ CREDIT NOTES FROM INVOICE
-            //////////////////////////////////////////////////
+            ////////////////////////////////////////////
+            // CREDIT NOTES ONLY HERE
+            ////////////////////////////////////////////
             creditNotes: {
               select: {
                 id: true,
@@ -258,6 +272,7 @@ exports.getPayments = async (req, res) => {
           },
         },
       },
+
       orderBy: {
         createdAt: "desc",
       },
