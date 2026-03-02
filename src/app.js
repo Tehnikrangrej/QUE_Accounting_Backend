@@ -14,6 +14,7 @@ const checkByEmailRoutes = require("./routes/checkbyemail");
 const paymentRoutes = require("./routes/paymentRoutes");
 const creditNoteRoutes = require("./routes/creditNoteRoutes");
 const moduleRoutes = require("./routes/module.routes");
+const customerLedgerRoutes = require("./routes/customerLedgerRoutes");
 const app = express();
 
 app.use(cors());
@@ -31,6 +32,7 @@ app.use("/api/check-email", checkByEmailRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/credit-notes", creditNoteRoutes);
 app.use("/api/modules", moduleRoutes);
+app.use("/api/ledger",customerLedgerRoutes);
 app.get("/", (req, res) => {
   res.send("QUE Accounting Backend Running...");
 });
