@@ -16,121 +16,153 @@ const getCustomerLedgerData = async (
   const start = new Date(fromDate);
   const end = new Date(toDate);
 
-  ////////////////////// INVOICES //////////////////////
+  if (isNaN(start) || isNaN(end)) {
+    throw new Error("Invalid date format");
+  }
+
+  //////////////////////////////////////////////////////
+  // INVOICES (DEBIT)
+  //////////////////////////////////////////////////////
   const invoices = await prisma.invoice.findMany({
-    where:{
+    where: {
       businessId,
       customerId,
-      createdAt:{ gte:start, lte:end }
+      createdAt: { gte: start, lte: end }
     },
-    select:{
-      invoiceNumber:true,
-      grandTotal:true,
-      createdAt:true
+    select: {
+      invoiceNumber: true,
+      grandTotal: true,
+      createdAt: true,
+      dueDate: true
     }
   });
 
-  ////////////////////// PAYMENTS //////////////////////
+  //////////////////////////////////////////////////////
+  // PAYMENTS (CREDIT)
+  //////////////////////////////////////////////////////
   const payments = await prisma.payment.findMany({
-    where:{
+    where: {
       businessId,
-      invoice:{ customerId },
-      paymentDate:{ gte:start, lte:end }
+      invoice: { customerId },
+      paymentDate: { gte: start, lte: end }
     },
-    select:{
-      id:true,
-      amount:true,
-      paymentDate:true
+    select: {
+      paymentNumber: true,
+      amount: true,
+      paymentDate: true,
+      invoice: {
+        select: {
+          invoiceNumber: true
+        }
+      }
     }
   });
 
-  ////////////////////// CREDIT NOTES //////////////////////
+  //////////////////////////////////////////////////////
+  // CREDIT NOTES (CREDIT)
+  //////////////////////////////////////////////////////
   const creditNotes = await prisma.creditNote.findMany({
-    where:{
+    where: {
       businessId,
       customerId,
-      createdAt:{ gte:start, lte:end }
+      createdAt: { gte: start, lte: end }
     },
-    select:{
-      creditNumber:true,
-      amount:true,
-      createdAt:true
+    select: {
+      creditNumber: true,
+      amount: true,
+      createdAt: true
     }
   });
 
   //////////////////////////////////////////////////////
   // BUILD LEDGER
   //////////////////////////////////////////////////////
-  let ledger=[];
+  let ledger = [];
 
-  invoices.forEach(inv=>{
+  invoices.forEach(inv => {
     ledger.push({
-      date:inv.createdAt,
-      type:"INVOICE",
-      refNo:inv.invoiceNumber,
-      debit:Number(inv.grandTotal)||0,
-      credit:0
+      date: inv.createdAt,
+      details: `Invoice ${inv.invoiceNumber} - due on ${
+        inv.dueDate
+          ? new Date(inv.dueDate).toISOString().split("T")[0]
+          : "-"
+      }`,
+      debit: Number(inv.grandTotal) || 0,
+      credit: 0
     });
   });
 
-  payments.forEach(pay=>{
+  payments.forEach(pay => {
     ledger.push({
-      date:pay.paymentDate,
-      type:"PAYMENT",
-      refNo:pay.id,
-      debit:0,
-      credit:Number(pay.amount)||0
+      date: pay.paymentDate,
+      details: `Payment (${pay.paymentNumber}) to invoice ${pay.invoice.invoiceNumber}`,
+      debit: 0,
+      credit: Number(pay.amount) || 0
     });
   });
 
-  creditNotes.forEach(cr=>{
+  creditNotes.forEach(cr => {
     ledger.push({
-      date:cr.createdAt,
-      type:"CREDIT_NOTE",
-      refNo:cr.creditNumber,
-      debit:0,
-      credit:Number(cr.amount)||0
+      date: cr.createdAt,
+      details: `Credit Note ${cr.creditNumber}`,
+      debit: 0,
+      credit: Number(cr.amount) || 0
     });
   });
 
-  ledger.sort((a,b)=> new Date(a.date)-new Date(b.date));
+  //////////////////////////////////////////////////////
+  // SORT BY DATE
+  //////////////////////////////////////////////////////
+  ledger.sort((a, b) => new Date(a.date) - new Date(b.date));
 
   //////////////////////////////////////////////////////
   // RUNNING BALANCE
   //////////////////////////////////////////////////////
-  let balance=0;
+  let balance = 0;
 
-  const finalLedger=ledger.map(row=>{
-    balance+=row.debit-row.credit;
-    return {...row,balance};
+  const finalLedger = ledger.map(row => {
+    balance += row.debit - row.credit;
+    return {
+      ...row,
+      balance
+    };
   });
 
   return {
     fromDate,
     toDate,
-    closingBalance:balance,
-    data:finalLedger
+    closingBalance: balance,
+    data: finalLedger
   };
 };
 
 ////////////////////////////////////////////////////////
-// GET CUSTOMER LEDGER (BODY BASED)
+// GET CUSTOMER LEDGER
 ////////////////////////////////////////////////////////
-exports.getCustomerLedger = async (req,res)=>{
-  try{
+exports.getCustomerLedger = async (req, res) => {
+  try {
 
-    const businessId=req.business.id;
-    const {customerId}=req.params;
-    const {fromDate,toDate}=req.body;
+    const businessId = req.business.id;
+    const { customerId } = req.params;
+    let { fromDate, toDate } = req.body;
 
-    if(!fromDate || !toDate){
+    if (!fromDate || !toDate) {
       return res.status(400).json({
-        success:false,
-        message:"fromDate and toDate required"
+        success: false,
+        message: "fromDate and toDate required"
       });
     }
 
-    const ledger=await getCustomerLedgerData(
+    //////////////////////////////////////////////////////
+    // LIMIT TO DATE TO TODAY
+    //////////////////////////////////////////////////////
+    const today = new Date().toISOString().split("T")[0];
+
+    if (toDate > today) {
+      toDate = today;
+    }
+
+    const ledger = await getCustomerLedgerData(
       businessId,
       customerId,
       fromDate,
@@ -138,40 +170,50 @@ exports.getCustomerLedger = async (req,res)=>{
     );
 
     res.json({
-      success:true,
+      success: true,
       ...ledger
     });
 
-  }catch(error){
-    console.error(error);
+  } catch (error) {
+    console.error("LEDGER ERROR:", error);
+
     res.status(500).json({
-      success:false,
-      message:"Ledger fetch failed"
+      success: false,
+      message: "Ledger fetch failed"
     });
   }
 };
 
 ////////////////////////////////////////////////////////
-// DOWNLOAD STATEMENT PDF
+// GENERATE STATEMENT PDF + RETURN URL
 ////////////////////////////////////////////////////////
-exports.getCustomerStatementPdf = async (req,res)=>{
-  try{
+exports.getCustomerStatementPdf = async (req, res) => {
+  try {
 
-    const businessId=req.business.id;
-    const {customerId}=req.params;
-    const {fromDate,toDate}=req.body;
+    const businessId = req.business.id;
+    const { customerId } = req.params;
+    let { fromDate, toDate } = req.body;
 
-    if(!fromDate || !toDate){
+    if (!fromDate || !toDate) {
       return res.status(400).json({
-        success:false,
-        message:"fromDate and toDate required"
+        success: false,
+        message: "fromDate and toDate required"
       });
+    }
+
+    //////////////////////////////////////////////////////
+    // LIMIT TO DATE TO TODAY
+    //////////////////////////////////////////////////////
+    const today = new Date().toISOString().split("T")[0];
+
+    if (toDate > today) {
+      toDate = today;
     }
 
     //////////////////////////////////////////////////////
     // LEDGER DATA
     //////////////////////////////////////////////////////
-    const ledger=await getCustomerLedgerData(
+    const ledger = await getCustomerLedgerData(
       businessId,
       customerId,
       fromDate,
@@ -181,34 +223,34 @@ exports.getCustomerStatementPdf = async (req,res)=>{
     //////////////////////////////////////////////////////
     // CUSTOMER
     //////////////////////////////////////////////////////
-    const customer=await prisma.customer.findUnique({
-      where:{id:customerId},
-      select:{company:true}
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { company: true }
     });
 
     //////////////////////////////////////////////////////
     // GENERATE HTML
     //////////////////////////////////////////////////////
-    const html=ledgerTemplate({customer,ledger});
+    const html = ledgerTemplate({ customer, ledger });
 
     //////////////////////////////////////////////////////
     // GENERATE PDF BUFFER
     //////////////////////////////////////////////////////
-    const pdfBuffer=await generatePdf(html);
+    const pdfBuffer = await generatePdf(html);
 
     //////////////////////////////////////////////////////
-    // UPLOAD CLOUDINARY
+    // UPLOAD TO CLOUDINARY
     //////////////////////////////////////////////////////
-    const upload=await new Promise((resolve,reject)=>{
+    const upload = await new Promise((resolve, reject) => {
 
-      const stream=cloudinary.uploader.upload_stream(
+      const stream = cloudinary.uploader.upload_stream(
         {
-          resource_type:"raw",
-          public_id:`statements/customer-${customerId}-${Date.now()}`,
-          format:"pdf"
+          resource_type: "raw",
+          public_id: `statements/customer-${customerId}-${Date.now()}`,
+          format: "pdf"
         },
-        (err,result)=>{
-          if(err) return reject(err);
+        (err, result) => {
+          if (err) return reject(err);
           resolve(result);
         }
       );
@@ -217,19 +259,19 @@ exports.getCustomerStatementPdf = async (req,res)=>{
     });
 
     //////////////////////////////////////////////////////
-    // RETURN URL
+    // RESPONSE
     //////////////////////////////////////////////////////
     res.json({
-      success:true,
-      pdfUrl:upload.secure_url
+      success: true,
+      pdfUrl: upload.secure_url
     });
 
-  }catch(error){
-    console.error("STATEMENT ERROR:",error);
+  } catch (error) {
+    console.error("STATEMENT ERROR:", error);
 
     res.status(500).json({
-      success:false,
-      message:"Statement generation failed"
+      success: false,
+      message: "Statement generation failed"
     });
   }
 };

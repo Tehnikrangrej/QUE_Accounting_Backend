@@ -23,7 +23,7 @@ exports.createPayment = async (req, res) => {
     } = req.body;
 
     ////////////////////////////////////////////////////
-    // GET FULL INVOICE WITH PAYMENTS + CUSTOMER
+    // GET INVOICE
     ////////////////////////////////////////////////////
     const invoice = await prisma.invoice.findFirst({
       where: { id: invoiceId, businessId },
@@ -34,9 +34,8 @@ exports.createPayment = async (req, res) => {
       },
     });
 
-    if (!invoice) {
+    if (!invoice)
       return errorResponse(res, "Invoice not found", 404);
-    }
 
     ////////////////////////////////////////////////////
     // CALCULATE PREVIOUS PAYMENTS
@@ -46,36 +45,57 @@ exports.createPayment = async (req, res) => {
       0
     );
 
-    const remainingBeforePayment =
+    const remaining =
       Number(invoice.grandTotal) - previousPaid;
+
+    ////////////////////////////////////////////////////
+    // 🔢 GENERATE PAYMENT NUMBER (PER BUSINESS)
+    ////////////////////////////////////////////////////
+    const lastPayment = await prisma.payment.findFirst({
+      where: { businessId },
+      orderBy: { createdAt: "desc" },
+      select: { paymentNumber: true },
+    });
+
+    let paymentNumber = "P-001";
+
+    if (lastPayment?.paymentNumber) {
+      const lastNumber = parseInt(
+        lastPayment.paymentNumber.split("-")[1]
+      );
+
+      const newNumber = lastNumber + 1;
+
+      paymentNumber = `P-${String(newNumber).padStart(3, "0")}`;
+    }
 
     ////////////////////////////////////////////////////
     // CREATE PAYMENT
     ////////////////////////////////////////////////////
     const payment = await prisma.payment.create({
       data: {
+        paymentNumber,
         invoiceId,
         businessId,
         amount: Number(amount),
-        createdBy: userId,
         paymentDate: new Date(paymentDate),
         paymentMode,
         transactionId,
         note,
+        createdBy: userId,
       },
     });
 
     ////////////////////////////////////////////////////
-    // CREDIT NOTE LOGIC (CORRECT FORMULA)
+    // CREDIT NOTE (OVERPAYMENT)
     ////////////////////////////////////////////////////
     let creditNote = null;
 
-    if (Number(amount) > remainingBeforePayment) {
-      const extraAmount =
-        Number(amount) - remainingBeforePayment;
+    if (Number(amount) > remaining) {
+      const extraAmount = Number(amount) - remaining;
 
       creditNote = await createCreditNote({
-        invoice, // full invoice with customer
+        invoice,
         businessId,
         extraAmount,
       });
@@ -84,16 +104,13 @@ exports.createPayment = async (req, res) => {
     ////////////////////////////////////////////////////
     // UPDATE INVOICE STATUS
     ////////////////////////////////////////////////////
-    const newTotalPaid =
-      previousPaid + Number(amount);
+    const totalPaid = previousPaid + Number(amount);
 
     let status = "UNPAID";
 
-    if (newTotalPaid < invoice.grandTotal) {
+    if (totalPaid < invoice.grandTotal)
       status = "PARTIALLY_PAID";
-    } else {
-      status = "PAID";
-    }
+    else status = "PAID";
 
     await prisma.invoice.update({
       where: { id: invoiceId },
@@ -101,18 +118,19 @@ exports.createPayment = async (req, res) => {
     });
 
     ////////////////////////////////////////////////////
-    // REFRESH INVOICE AFTER PAYMENT
+    // REFRESH INVOICE
     ////////////////////////////////////////////////////
-    const updatedInvoice = await prisma.invoice.findUnique({
-      where: { id: invoiceId },
-      include: {
-        payments: true,
-        customer: true,
-      },
-    });
+    const updatedInvoice =
+      await prisma.invoice.findUnique({
+        where: { id: invoiceId },
+        include: {
+          customer: true,
+          payments: true,
+        },
+      });
 
     ////////////////////////////////////////////////////
-    // GENERATE PAYMENT PDF (USING UPDATED DATA)
+    // GENERATE PAYMENT PDF
     ////////////////////////////////////////////////////
     let finalPayment = payment;
 
@@ -137,8 +155,8 @@ exports.createPayment = async (req, res) => {
         data: { pdfUrl },
       });
 
-    } catch (pdfError) {
-      console.error("Payment PDF generation failed:", pdfError);
+    } catch (err) {
+      console.error("PDF ERROR:", err);
     }
 
     ////////////////////////////////////////////////////
@@ -148,24 +166,16 @@ exports.createPayment = async (req, res) => {
       res,
       {
         payment: finalPayment,
-        creditNote: creditNote
-          ? {
-              ...creditNote,
-              downloadUrl: `${req.protocol}://${req.get(
-                "host"
-              )}/api/credit-notes/${creditNote.id}/download`,
-            }
-          : null,
+        creditNote,
       },
-      "Payment recorded"
+      "Payment recorded successfully"
     );
 
   } catch (error) {
-    console.error("Payment Error:", error);
+    console.error(error);
     return errorResponse(res, "Internal server error", 500);
   }
 };
-
 //////////////////////////////////////////////////////
 // GET PAYMENTS BY INVOICE
 //////////////////////////////////////////////////////

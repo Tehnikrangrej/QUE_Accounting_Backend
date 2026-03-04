@@ -374,6 +374,7 @@ model Payment {
   //////////////////////////////////////////////////////
   invoiceId     String
   businessId    String
+  paymentNumber String   @unique   // ⭐ ADD THIS
 
   invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   business      Business @relation(fields: [businessId], references: [id])

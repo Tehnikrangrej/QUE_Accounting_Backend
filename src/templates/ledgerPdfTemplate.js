@@ -1,15 +1,76 @@
 module.exports = ({ customer, ledger }) => {
 
-const rows = ledger.data.map(row => `
+//////////////////////////////////////////////////////
+// SUMMARY CALCULATION
+//////////////////////////////////////////////////////
+
+let invoicedAmount = 0;
+let amountPaid = 0;
+
+ledger.data.forEach(r => {
+  invoicedAmount += r.debit || 0;
+  amountPaid += r.credit || 0;
+});
+
+const beginningBalance = 0;
+const balanceDue = ledger.closingBalance || 0;
+
+//////////////////////////////////////////////////////
+// HELPER FUNCTION
+//////////////////////////////////////////////////////
+
+function parseDetails(details){
+
+  let type = "";
+  let refNo = "";
+
+  if(details.startsWith("Invoice")){
+    type = "Invoice";
+    refNo = details.split(" ")[1];
+  }
+
+  else if(details.startsWith("Payment")){
+    type = "Payment";
+    const match = details.match(/\((.*?)\)/);
+    refNo = match ? match[1] : "";
+  }
+
+  else if(details.startsWith("Credit Note")){
+    type = "Credit Note";
+    refNo = details.split(" ")[2];
+  }
+
+  else{
+    type = details;
+  }
+
+  return { type, refNo };
+}
+
+//////////////////////////////////////////////////////
+// TABLE ROWS
+//////////////////////////////////////////////////////
+
+const rows = ledger.data.map(row => {
+
+const parsed = parseDetails(row.details);
+
+return `
 <tr>
-  <td class="date">${new Date(row.date).toISOString().split("T")[0]}</td>
-  <td class="type">${row.type}</td>
-  <td class="ref">${row.refNo}</td>
-  <td class="num">${row.debit ? row.debit.toFixed(2) : ""}</td>
-  <td class="num">${row.credit ? row.credit.toFixed(2) : ""}</td>
-  <td class="num">${row.balance.toFixed(2)}</td>
+  <td class="date">${new Date(row.date).toLocaleDateString("en-CA")}</td>
+  <td>${parsed.type}</td>
+  <td class="ref">${parsed.refNo}</td>
+  <td class="num">${row.debit ? Number(row.debit).toFixed(2) : ""}</td>
+  <td class="num">${row.credit ? Number(row.credit).toFixed(2) : ""}</td>
+  <td class="num">${Number(row.balance).toFixed(2)}</td>
 </tr>
-`).join("");
+`;
+
+}).join("");
+
+//////////////////////////////////////////////////////
+// HTML
+//////////////////////////////////////////////////////
 
 return `
 <html>
@@ -20,25 +81,38 @@ return `
 body{
   font-family: Arial, Helvetica, sans-serif;
   padding:40px;
-  color:#222;
+  color:#333;
 }
 
 /* HEADER */
-.title{
-  font-size:24px;
-  font-weight:bold;
+
+.header{
+  display:flex;
+  justify-content:space-between;
 }
 
-.period{
-  margin-top:5px;
-  margin-bottom:25px;
+.summary{
+  width:320px;
+  text-align:right;
+}
+
+.summary hr{
+  border:none;
+  border-top:1px solid #bbb;
+  margin:10px 0;
+}
+
+.center-text{
+  text-align:center;
+  margin:25px 0;
 }
 
 /* TABLE */
+
 table{
   width:100%;
   border-collapse:collapse;
-  table-layout:fixed; /* ⭐ IMPORTANT */
+  table-layout:fixed;
 }
 
 thead{
@@ -49,24 +123,27 @@ th{
   padding:12px;
   text-align:left;
   font-weight:600;
-  border-bottom:2px solid #bfbfbf;
 }
 
 td{
   padding:12px;
-  border-bottom:1px solid #ececec;
-  vertical-align:top;
+  border-bottom:1px solid #eee;
 }
 
-/* COLUMN WIDTH FIX */
-.date{ width:120px; white-space:nowrap; }
-.type{ width:130px; }
-.ref{ width:260px; word-break:break-word; }
-.num{ width:130px; text-align:right; }
-
-/* ROW STRIPES */
 tbody tr:nth-child(even){
-  background:#f7f7f7;
+  background:#f5f5f5;
+}
+
+/* COLUMN WIDTH */
+
+.date{ width:110px; white-space:nowrap; }
+.ref{ word-break:break-word; }
+.num{ text-align:right; }
+
+.footer{
+  margin-top:20px;
+  text-align:right;
+  font-weight:bold;
 }
 
 </style>
@@ -75,27 +152,65 @@ tbody tr:nth-child(even){
 
 <body>
 
-<div class="title">${customer.company}</div>
-<div class="period">${ledger.fromDate} To ${ledger.toDate}</div>
+<div class="header">
+
+<div>
+<strong>To</strong><br/>
+${customer.company}
+</div>
+
+<div class="summary">
+<h3>Account Summary</h3>
+${ledger.fromDate} To ${ledger.toDate}
+
+<hr/>
+
+Beginning Balance: $${beginningBalance.toFixed(2)}<br/>
+Invoiced Amount: $${invoicedAmount.toFixed(2)}<br/>
+Amount Paid: $${amountPaid.toFixed(2)}<br/>
+
+<strong>Balance Due: $${balanceDue.toFixed(2)}</strong>
+</div>
+
+</div>
+
+<div class="center-text">
+Showing all invoices and payments between ${ledger.fromDate} and ${ledger.toDate}
+</div>
 
 <table>
 
 <thead>
 <tr>
-  <th>Date</th>
-  <th>Type</th>
-  <th>Ref No</th>
-  <th>Debit</th>
-  <th>Credit</th>
-  <th>Balance</th>
+<th>Date</th>
+<th>Type</th>
+<th>Ref No</th>
+<th>Debit</th>
+<th>Credit</th>
+<th>Balance</th>
 </tr>
 </thead>
 
 <tbody>
+
+<tr>
+<td>${ledger.fromDate}</td>
+<td>Opening Balance</td>
+<td></td>
+<td class="num">${beginningBalance.toFixed(2)}</td>
+<td></td>
+<td class="num">${beginningBalance.toFixed(2)}</td>
+</tr>
+
 ${rows}
+
 </tbody>
 
 </table>
+
+<div class="footer">
+Balance Due &nbsp;&nbsp; $${balanceDue.toFixed(2)}
+</div>
 
 </body>
 </html>
