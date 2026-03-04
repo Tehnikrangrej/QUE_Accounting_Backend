@@ -124,7 +124,7 @@ end.setHours(23, 59, 59, 999);
   let balance = 0;
 
   const finalLedger = ledger.map(row => {
-    balance += row.debit - row.credit;
+   balance = Number((balance + row.debit - row.credit).toFixed(2));
     return {
       ...row,
       balance
