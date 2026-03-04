@@ -13,8 +13,11 @@ const getCustomerLedgerData = async (
   toDate
 ) => {
 
-  const start = new Date(fromDate);
-  const end = new Date(toDate);
+const start = new Date(fromDate);
+start.setHours(0, 0, 0, 0);
+
+const end = new Date(toDate);
+end.setHours(23, 59, 59, 999);
 
   if (isNaN(start) || isNaN(end)) {
     throw new Error("Invalid date format");
