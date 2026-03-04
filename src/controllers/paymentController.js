@@ -48,27 +48,24 @@ exports.createPayment = async (req, res) => {
     const remaining =
       Number(invoice.grandTotal) - previousPaid;
 
-    ////////////////////////////////////////////////////
-    // 🔢 GENERATE PAYMENT NUMBER (PER BUSINESS)
-    ////////////////////////////////////////////////////
-    const lastPayment = await prisma.payment.findFirst({
-      where: { businessId },
-      orderBy: { createdAt: "desc" },
-      select: { paymentNumber: true },
-    });
+   ////////////////////////////////////////////////////
+// 🔢 GENERATE PAYMENT NUMBER (PER BUSINESS)
+////////////////////////////////////////////////////
+const lastPayment = await prisma.payment.findFirst({
+  where: { businessId },
+  orderBy: { paymentNumber: "desc" },
+  select: { paymentNumber: true },
+});
 
-    let paymentNumber = "P-001";
+let paymentNumber = "P-001";
 
-    if (lastPayment?.paymentNumber) {
-      const lastNumber = parseInt(
-        lastPayment.paymentNumber.split("-")[1]
-      );
+if (lastPayment && lastPayment.paymentNumber) {
+  const lastNumber = parseInt(lastPayment.paymentNumber.split("-")[1]);
 
-      const newNumber = lastNumber + 1;
+  const newNumber = lastNumber + 1;
 
-      paymentNumber = `P-${String(newNumber).padStart(3, "0")}`;
-    }
-
+  paymentNumber = `P-${String(newNumber).padStart(3, "0")}`;
+}
     ////////////////////////////////////////////////////
     // CREATE PAYMENT
     ////////////////////////////////////////////////////
