@@ -358,7 +358,7 @@ model Settings {
   swiftCode         String?
   defaultFooterNote String?
   defaultTerms      String?
-
+  invoiceFormat String @default("INV-YYYY-MM-DD-COUNT")
   users User[]
 }
 

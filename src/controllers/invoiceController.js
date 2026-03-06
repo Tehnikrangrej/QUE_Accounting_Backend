@@ -51,11 +51,9 @@ exports.createInvoice = async (req, res) => {
     //////////////////////////////////////////////////////
     const invoice = await prisma.$transaction(async (tx) => {
 
-      const invoiceNumber = await generateInvoiceNumber(
-        tx,
-        req.business.id
-      );
-
+     const invoiceNumber = await generateInvoiceNumber(
+  req.business.id
+);
       let subtotal = 0;
       let totalTax = 0;
 
