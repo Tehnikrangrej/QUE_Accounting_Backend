@@ -442,3 +442,50 @@ enum CreditNoteStatus {
  OPEN
  CLOSED
 }
+
+model Employee {
+  id          String   @id @default(uuid())
+  businessId  String
+  name        String
+  email       String?
+  phone       String?
+  designation String?
+  joinDate    DateTime?
+  basicSalary Float
+  allowance    Float    @default(0)
+  deduction    Float    @default(0)
+
+  createdAt   DateTime @default(now())
+
+  payslips    Payslip[]
+}
+
+model Payslip {
+  id          String   @id @default(uuid())
+  payrollId   String
+  employeeId  String
+  employeeName String
+  basicSalary Float
+  allowance   Float   @default(0)
+  deduction   Float   @default(0)
+  netSalary   Float
+
+  status      String  @default("pending")
+  pdfUrl      String?
+
+  createdAt   DateTime @default(now())
+
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  payroll     Payroll  @relation(fields: [payrollId], references: [id])
+}
+model Payroll {
+  id         String   @id @default(uuid())
+  businessId String
+  month      Int
+  year       Int
+  status     String   @default("draft")
+
+  createdAt  DateTime @default(now())
+
+  payslips   Payslip[]
+}
