@@ -13,14 +13,14 @@ exports.runPayroll = async (req, res) => {
     const { month, year } = req.body;
 
     //////////////////////////////////////////////////////
-    // GET SETTINGS (LOGO / ADDRESS)
+    // GET SETTINGS
     //////////////////////////////////////////////////////
     const settings = await prisma.settings.findUnique({
       where: { businessId }
     });
 
     //////////////////////////////////////////////////////
-    // GET ALL EMPLOYEES
+    // GET EMPLOYEES
     //////////////////////////////////////////////////////
     const employees = await prisma.employee.findMany({
       where: { businessId }
@@ -46,17 +46,37 @@ exports.runPayroll = async (req, res) => {
     });
 
     //////////////////////////////////////////////////////
-    // CREATE PAYSLIPS + GENERATE PDF
+    // CREATE PAYSLIPS
     //////////////////////////////////////////////////////
     const payslips = await Promise.all(
 
       employees.map(async (emp) => {
 
         const basicSalary = emp.basicSalary;
-        const allowance = emp.allowance || 0;
-        const deduction = emp.deduction || 0;
 
-        const netSalary = basicSalary + allowance - deduction;
+        //////////////////////////////////////////////////////
+        // SAFE ALLOWANCE / DEDUCTION
+        //////////////////////////////////////////////////////
+        const allowances = Array.isArray(emp.allowance)
+          ? emp.allowance
+          : [];
+
+        const deductions = Array.isArray(emp.deduction)
+          ? emp.deduction
+          : [];
+
+        //////////////////////////////////////////////////////
+        // TOTAL CALCULATIONS
+        //////////////////////////////////////////////////////
+        const totalAllowance = allowances.reduce(
+          (sum, a) => sum + Number(a.amount || 0), 0
+        );
+
+        const totalDeduction = deductions.reduce(
+          (sum, d) => sum + Number(d.amount || 0), 0
+        );
+
+        const netSalary = basicSalary + totalAllowance - totalDeduction;
 
         //////////////////////////////////////////////////////
         // CREATE PAYSLIP
@@ -67,8 +87,8 @@ exports.runPayroll = async (req, res) => {
             employeeId: emp.id,
             employeeName: emp.name,
             basicSalary,
-            allowance,
-            deduction,
+            allowance: totalAllowance,
+            deduction: totalDeduction,
             netSalary,
             status: "pending"
           }
@@ -80,6 +100,9 @@ exports.runPayroll = async (req, res) => {
         const pdfBuffer = await generatePdf(
           {
             ...payslip,
+            employee: emp,
+            allowanceList: allowances,
+            deductionList: deductions,
             month,
             year
           },
@@ -95,7 +118,7 @@ exports.runPayroll = async (req, res) => {
         );
 
         //////////////////////////////////////////////////////
-        // UPDATE PAYSLIP WITH PDF URL
+        // SAVE URL
         //////////////////////////////////////////////////////
         const updatedPayslip = await prisma.payslip.update({
           where: { id: payslip.id },
@@ -105,7 +128,6 @@ exports.runPayroll = async (req, res) => {
         return updatedPayslip;
 
       })
-
     );
 
     res.json({
@@ -132,28 +154,17 @@ exports.runPayroll = async (req, res) => {
 //////////////////////////////////////////////////////
 exports.getPayrolls = async (req, res) => {
 
-  try {
+  const businessId = req.business.id;
 
-    const businessId = req.business.id;
+  const payrolls = await prisma.payroll.findMany({
+    where: { businessId },
+    orderBy: { createdAt: "desc" }
+  });
 
-    const payrolls = await prisma.payroll.findMany({
-      where: { businessId },
-      orderBy: { createdAt: "desc" }
-    });
-
-    res.json({
-      success: true,
-      data: payrolls
-    });
-
-  } catch (error) {
-
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-
-  }
+  res.json({
+    success: true,
+    data: payrolls
+  });
 
 };
 
@@ -162,66 +173,38 @@ exports.getPayrolls = async (req, res) => {
 //////////////////////////////////////////////////////
 exports.getPayroll = async (req, res) => {
 
-  try {
-
-    const payroll = await prisma.payroll.findUnique({
-      where: {
-        id: req.params.id
-      },
-      include: {
-        payslips: {
-          include: {
-            employee: true
-          }
+  const payroll = await prisma.payroll.findUnique({
+    where: { id: req.params.id },
+    include: {
+      payslips: {
+        include: {
+          employee: true
         }
       }
-    });
+    }
+  });
 
-    res.json({
-      success: true,
-      data: payroll
-    });
-
-  } catch (error) {
-
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-
-  }
+  res.json({
+    success: true,
+    data: payroll
+  });
 
 };
 
 //////////////////////////////////////////////////////
-// MARK SALARY AS PAID
+// MARK SALARY PAID
 //////////////////////////////////////////////////////
 exports.paySalary = async (req, res) => {
 
-  try {
+  const payslip = await prisma.payslip.update({
+    where: { id: req.params.id },
+    data: { status: "paid" }
+  });
 
-    const payslip = await prisma.payslip.update({
-      where: {
-        id: req.params.id
-      },
-      data: {
-        status: "paid"
-      }
-    });
-
-    res.json({
-      success: true,
-      data: payslip
-    });
-
-  } catch (error) {
-
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-
-  }
+  res.json({
+    success: true,
+    data: payslip
+  });
 
 };
 
@@ -230,40 +213,19 @@ exports.paySalary = async (req, res) => {
 //////////////////////////////////////////////////////
 exports.deletePayroll = async (req, res) => {
 
-  try {
+  const payrollId = req.params.id;
 
-    const payrollId = req.params.id;
+  await prisma.payslip.deleteMany({
+    where: { payrollId }
+  });
 
-    //////////////////////////////////////////////////////
-    // DELETE PAYSLIPS
-    //////////////////////////////////////////////////////
-    await prisma.payslip.deleteMany({
-      where: {
-        payrollId
-      }
-    });
+  await prisma.payroll.delete({
+    where: { id: payrollId }
+  });
 
-    //////////////////////////////////////////////////////
-    // DELETE PAYROLL
-    //////////////////////////////////////////////////////
-    await prisma.payroll.delete({
-      where: {
-        id: payrollId
-      }
-    });
-
-    res.json({
-      success: true,
-      message: "Payroll deleted successfully"
-    });
-
-  } catch (error) {
-
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-
-  }
+  res.json({
+    success: true,
+    message: "Payroll deleted successfully"
+  });
 
 };

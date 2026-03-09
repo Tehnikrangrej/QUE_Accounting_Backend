@@ -452,8 +452,8 @@ model Employee {
   designation String?
   joinDate    DateTime?
   basicSalary Float
-  allowance    Float    @default(0)
-  deduction    Float    @default(0)
+   allowance    Json?
+  deduction    Json?
 
   createdAt   DateTime @default(now())
 
@@ -489,3 +489,4 @@ model Payroll {
 
   payslips   Payslip[]
 }
+
