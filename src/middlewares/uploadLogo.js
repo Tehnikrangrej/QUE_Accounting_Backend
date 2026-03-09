@@ -26,11 +26,6 @@ const storage = new CloudinaryStorage({
     return {
       folder,
       resource_type: "image",
-      transformation: [
-        {
-          effect: "background_removal",
-        }
-      ],
       allowed_formats: ["jpg", "jpeg", "png", "webp"],
     };
   },
