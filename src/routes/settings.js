@@ -29,7 +29,10 @@ router.post(
   "/",
   authMiddleware,
   businessMiddleware,
-  uploadLogo.single("companyLogo"),
+  uploadLogo.fields([
+    { name: "companyLogo", maxCount: 1 },
+    { name: "signature", maxCount: 1 }
+  ]),
   checkPermission("settings", "update"),
   controller.saveSettings
 );

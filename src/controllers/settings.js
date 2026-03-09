@@ -27,21 +27,28 @@ exports.getSettings = async (req, res) => {
 //////////////////////////////////////////////////////
 // CREATE OR UPDATE SETTINGS
 //////////////////////////////////////////////////////
-//////////////////////////////////////////////////////
 exports.saveSettings = async (req, res) => {
   try {
+
     const businessId = req.business.id;
     const data = { ...req.body };
 
     //////////////////////////////////////////////////////
-    // OPTIONAL LOGO UPLOAD
+    // LOGO UPLOAD
     //////////////////////////////////////////////////////
-    if (req.file) {
-      data.companyLogo = req.file.path;
+    if (req.files?.companyLogo) {
+      data.companyLogo = req.files.companyLogo[0].path;
     }
 
     //////////////////////////////////////////////////////
-    // CHECK IF SETTINGS EXIST
+    // SIGNATURE UPLOAD
+    //////////////////////////////////////////////////////
+    if (req.files?.signature) {
+      data.signatureUrl = req.files.signature[0].path;
+    }
+
+    //////////////////////////////////////////////////////
+    // CHECK EXISTING SETTINGS
     //////////////////////////////////////////////////////
     const existingSettings = await prisma.settings.findUnique({
       where: { businessId },
@@ -50,9 +57,10 @@ exports.saveSettings = async (req, res) => {
     let settings;
 
     //////////////////////////////////////////////////////
-    // CREATE (FIRST TIME ONLY)
+    // CREATE SETTINGS
     //////////////////////////////////////////////////////
     if (!existingSettings) {
+
       settings = await prisma.settings.create({
         data: {
           businessId,
@@ -68,7 +76,7 @@ exports.saveSettings = async (req, res) => {
     }
 
     //////////////////////////////////////////////////////
-    // UPDATE ONLY
+    // UPDATE SETTINGS
     //////////////////////////////////////////////////////
     settings = await prisma.settings.update({
       where: { businessId },

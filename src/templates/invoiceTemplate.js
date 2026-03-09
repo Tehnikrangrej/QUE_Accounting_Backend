@@ -190,13 +190,34 @@ tbody td:nth-child(2){
 }
 
 /* ================= SIGNATURE ================= */
-
 .signature{
   margin-top:60px;
-  text-align:right;
-  font-size:12px;
+  display:flex;
+  justify-content:flex-end;
 }
 
+.signature-box{
+  width:220px;
+  text-align:center;
+}
+
+.signature-img{
+  height:90px;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+}
+
+.signature-img img{
+  max-width:200px;
+  max-height:90px;
+  object-fit:contain;
+}
+
+.signature-line{
+  border-top:2px solid #000;
+  margin-top:6px;
+}
 </style>
 
 </head>
@@ -323,10 +344,26 @@ ${(invoice.items || []).map((i,idx)=>`
 </div>
 
 <div class="signature">
-  _______________________<br/>
-  Authorized Signature
-</div>
 
+  <div class="signature-box">
+
+    <div class="signature-img">
+      ${
+        settings.signatureUrl
+          ? `<img src="${settings.signatureUrl}" />`
+          : ""
+      }
+    </div>
+
+    <div class="signature-line"></div>
+
+    <div style="font-size:12px;margin-top:5px;">
+      Authorized Signature
+    </div>
+
+  </div>
+
+</div>
 </div>
 </body>
 </html>

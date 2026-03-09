@@ -359,6 +359,7 @@ model Settings {
   defaultFooterNote String?
   defaultTerms      String?
   invoiceFormat String @default("INV-YYYY-MM-DD-COUNT")
+   signatureUrl  String?
   users User[]
 }
 
