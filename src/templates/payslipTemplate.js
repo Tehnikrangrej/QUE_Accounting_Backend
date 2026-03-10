@@ -101,7 +101,7 @@ ${settings?.companyName || ""} – Private & Confidential
 
 <div class="logo">
 ${settings?.companyLogo 
-  ? `<img src="${settings.companyLogo}" style="width:150px;height:auto;" />`
+  ? `<img src="${settings.companyLogo}" style="width:200px;height:auto;" />`
   : ""}
 </div>
 
