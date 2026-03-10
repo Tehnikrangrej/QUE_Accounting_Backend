@@ -10,21 +10,24 @@ module.exports = async (payslip, settings) => {
 
   const page = await browser.newPage();
 
-  //////////////////////////////////////////////////////
-  // GENERATE HTML
-  //////////////////////////////////////////////////////
-  const html = payslipTemplate(payslip, settings || {});
+  const html = payslipTemplate(payslip, settings);
 
   //////////////////////////////////////////////////////
-  // LOAD HTML
+  // IMPORTANT: wait for images to load
   //////////////////////////////////////////////////////
   await page.setContent(html, {
-    waitUntil: "domcontentloaded"
+    waitUntil: "networkidle0"
   });
 
   //////////////////////////////////////////////////////
-  // GENERATE PDF
+  // wait for logo image
   //////////////////////////////////////////////////////
+  if (settings?.companyLogo) {
+    try {
+      await page.waitForSelector("img");
+    } catch (e) {}
+  }
+
   const pdfBuffer = await page.pdf({
     format: "A4",
     printBackground: true
