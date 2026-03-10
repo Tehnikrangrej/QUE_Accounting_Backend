@@ -3,42 +3,42 @@ const prisma = require("../config/prisma");
 //////////////////////////////////////////////////////
 // CREATE EMPLOYEE
 //////////////////////////////////////////////////////
-exports.createEmployee = async (req,res)=>{
+  exports.createEmployee = async (req,res)=>{
 
-  try{
+    try{
 
-    const businessId = req.business.id;
+      const businessId = req.business.id;
 
-    const employee = await prisma.employee.create({
-      data:{
-        businessId,
-        name:req.body.name,
-        email:req.body.email,
-        phone:req.body.phone,
-        designation:req.body.designation,
-        joinDate:req.body.joinDate,
-        basicSalary:Number(req.body.basicSalary),
+      const employee = await prisma.employee.create({
+        data:{
+          businessId,
+          name:req.body.name,
+          email:req.body.email,
+          phone:req.body.phone,
+          designation:req.body.designation,
+          joinDate:req.body.joinDate,
+          basicSalary:Number(req.body.basicSalary),
 
-        allowance:req.body.allowance || [],
-        deduction:req.body.deduction || []
-      }
-    });
+          allowance:req.body.allowance || [],
+          deduction:req.body.deduction || []
+        }
+      });
 
-    res.json({
-      success:true,
-      data:employee
-    });
+      res.json({
+        success:true,
+        data:employee
+      });
 
-  }catch(error){
+    }catch(error){
 
-    res.status(500).json({
-      success:false,
-      message:error.message
-    });
+      res.status(500).json({
+        success:false,
+        message:error.message
+      });
 
-  }
+    }
 
-};
+  };
 
 //////////////////////////////////////////////////////
 // GET ALL EMPLOYEES
