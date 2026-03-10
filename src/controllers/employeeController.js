@@ -48,7 +48,8 @@ exports.getAllEmployees = async (req,res)=>{
   const businessId = req.business.id;
 
   const employees = await prisma.employee.findMany({
-    where:{businessId}
+    where:{businessId},
+    include:{leaves:true}
   });
 
   res.json({

@@ -19,11 +19,14 @@ exports.runPayroll = async (req, res) => {
       where: { businessId }
     });
 
+    const leaveTypes = settings?.leaveTypes || [];
+
     //////////////////////////////////////////////////////
     // GET EMPLOYEES
     //////////////////////////////////////////////////////
     const employees = await prisma.employee.findMany({
-      where: { businessId }
+      where: { businessId },
+      include:{leaves:true}
     });
 
     if (!employees.length) {
@@ -55,7 +58,7 @@ exports.runPayroll = async (req, res) => {
         const basicSalary = emp.basicSalary;
 
         //////////////////////////////////////////////////////
-        // SAFE ALLOWANCE / DEDUCTION
+        // ALLOWANCES
         //////////////////////////////////////////////////////
         const allowances = Array.isArray(emp.allowance)
           ? emp.allowance
@@ -65,9 +68,6 @@ exports.runPayroll = async (req, res) => {
           ? emp.deduction
           : [];
 
-        //////////////////////////////////////////////////////
-        // TOTAL CALCULATIONS
-        //////////////////////////////////////////////////////
         const totalAllowance = allowances.reduce(
           (sum, a) => sum + Number(a.amount || 0), 0
         );
@@ -76,7 +76,62 @@ exports.runPayroll = async (req, res) => {
           (sum, d) => sum + Number(d.amount || 0), 0
         );
 
-        const netSalary = basicSalary + totalAllowance - totalDeduction;
+        //////////////////////////////////////////////////////
+        // LEAVE CALCULATION
+        //////////////////////////////////////////////////////
+        const monthLeaves = emp.leaves.filter(l=>{
+
+          const d = new Date(l.date)
+
+          return (
+            d.getMonth()+1 === month &&
+            d.getFullYear() === year
+          )
+
+        });
+
+        let leaveCount = {}
+
+        monthLeaves.forEach(l=>{
+
+          const value = l.duration === "HALF" ? 0.5 : 1
+
+          if(!leaveCount[l.leaveCode]){
+
+            leaveCount[l.leaveCode] = 0
+
+          }
+
+          leaveCount[l.leaveCode] += value
+
+        });
+
+        let unpaidLeaves = 0
+
+        leaveTypes.forEach(type=>{
+
+          const used = leaveCount[type.code] || 0
+
+          if(used > type.yearlyLimit){
+
+            unpaidLeaves += used - type.yearlyLimit
+
+          }
+
+        });
+
+        const dailySalary = basicSalary / 30
+
+        const leaveDeduction = unpaidLeaves * dailySalary
+
+        //////////////////////////////////////////////////////
+        // FINAL SALARY
+        //////////////////////////////////////////////////////
+        const netSalary =
+          basicSalary +
+          totalAllowance -
+          totalDeduction -
+          leaveDeduction;
 
         //////////////////////////////////////////////////////
         // CREATE PAYSLIP
@@ -88,7 +143,7 @@ exports.runPayroll = async (req, res) => {
             employeeName: emp.name,
             basicSalary,
             allowance: totalAllowance,
-            deduction: totalDeduction,
+            deduction: totalDeduction + leaveDeduction,
             netSalary,
             status: "pending"
           }
@@ -141,14 +196,13 @@ exports.runPayroll = async (req, res) => {
     console.error("Payroll Error:", error);
 
     res.status(500).json({
-      success: false,
-      message: error.message
+      success:false,
+      message:error.message
     });
 
   }
 
 };
-
 //////////////////////////////////////////////////////
 // GET ALL PAYROLLS
 //////////////////////////////////////////////////////

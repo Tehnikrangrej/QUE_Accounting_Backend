@@ -65,6 +65,7 @@
     settings Settings[]
     payments Payment[]
     creditNotes CreditNote[]
+    employees Employee[]
 }
 
   //////////////////////////////////////////////////////
@@ -360,6 +361,7 @@ model Settings {
   defaultTerms      String?
   invoiceFormat String @default("INV-YYYY-MM-DD-COUNT")
    signatureUrl  String?
+     leaveTypes   Json?
   users User[]
 }
 
@@ -454,10 +456,15 @@ model Employee {
   basicSalary Float
    allowance    Json?
   deduction    Json?
+  leaveBalance Json?
+
+   business Business @relation(fields: [businessId], references: [id])
 
   createdAt   DateTime @default(now())
 
   payslips    Payslip[]
+
+  leaves Leave[]
 }
 
 model Payslip {
@@ -490,3 +497,18 @@ model Payroll {
   payslips   Payslip[]
 }
 
+model Leave {
+
+  id          String   @id @default(uuid())
+
+  businessId  String
+  employeeId  String
+
+  leaveCode   String
+  date        DateTime
+  duration    String   // FULL | HALF
+
+  employee    Employee @relation(fields: [employeeId], references: [id])
+
+  createdAt   DateTime @default(now())
+}
