@@ -26,7 +26,7 @@ exports.runPayroll = async (req, res) => {
     //////////////////////////////////////////////////////
     const employees = await prisma.employee.findMany({
       where: { businessId },
-      include:{leaves:true}
+      include: { leaves: true }
     });
 
     if (!employees.length) {
@@ -49,7 +49,7 @@ exports.runPayroll = async (req, res) => {
     });
 
     //////////////////////////////////////////////////////
-    // CREATE PAYSLIPS
+    // GENERATE PAYSLIPS
     //////////////////////////////////////////////////////
     const payslips = await Promise.all(
 
@@ -69,67 +69,106 @@ exports.runPayroll = async (req, res) => {
           : [];
 
         const totalAllowance = allowances.reduce(
-          (sum, a) => sum + Number(a.amount || 0), 0
+          (sum, a) => sum + Number(a.amount || 0),
+          0
         );
 
         const totalDeduction = deductions.reduce(
-          (sum, d) => sum + Number(d.amount || 0), 0
+          (sum, d) => sum + Number(d.amount || 0),
+          0
         );
 
-        //////////////////////////////////////////////////////
-        // LEAVE CALCULATION
-        //////////////////////////////////////////////////////
-        const monthLeaves = emp.leaves.filter(l=>{
+        const grossSalary = basicSalary + totalAllowance;
 
-          const d = new Date(l.date)
-
+        //////////////////////////////////////////////////////
+        // FILTER LEAVES
+        //////////////////////////////////////////////////////
+        const monthLeaves = emp.leaves.filter(l => {
+          const d = new Date(l.date);
           return (
-            d.getMonth()+1 === month &&
+            d.getMonth() + 1 === month &&
             d.getFullYear() === year
-          )
+          );
+        });
+
+        const yearLeaves = emp.leaves.filter(l => {
+          const d = new Date(l.date);
+          return d.getFullYear() === year;
+        });
+
+        //////////////////////////////////////////////////////
+        // LEAVE COUNTS
+        //////////////////////////////////////////////////////
+        let monthLeaveCount = {};
+        let yearLeaveCount = {};
+        let unpaidLeaves = 0;
+
+        // MONTH LEAVES
+        monthLeaves.forEach(l => {
+
+          const value = l.duration === "HALF" ? 0.5 : 1;
+
+          if (!monthLeaveCount[l.leaveCode]) {
+            monthLeaveCount[l.leaveCode] = 0;
+          }
+
+          monthLeaveCount[l.leaveCode] += value;
+
+          // LWP always unpaid
+          if (l.leaveCode === "LWP") {
+            unpaidLeaves += value;
+          }
 
         });
 
-        let leaveCount = {}
+        // YEAR LEAVES
+        yearLeaves.forEach(l => {
 
-        monthLeaves.forEach(l=>{
+          const value = l.duration === "HALF" ? 0.5 : 1;
 
-          const value = l.duration === "HALF" ? 0.5 : 1
+          if (!yearLeaveCount[l.leaveCode]) {
+            yearLeaveCount[l.leaveCode] = 0;
+          }
 
-          if(!leaveCount[l.leaveCode]){
+          yearLeaveCount[l.leaveCode] += value;
 
-            leaveCount[l.leaveCode] = 0
+        });
+
+        //////////////////////////////////////////////////////
+        // CHECK YEARLY LIMIT
+        //////////////////////////////////////////////////////
+        leaveTypes.forEach(type => {
+
+          if (type.code === "LWP") return;
+
+          const usedYear = yearLeaveCount[type.code] || 0;
+          const usedMonth = monthLeaveCount[type.code] || 0;
+
+          if (
+            type.yearlyLimit !== null &&
+            usedYear > type.yearlyLimit
+          ) {
+
+            const exceeded = usedYear - type.yearlyLimit;
+
+            unpaidLeaves += Math.min(exceeded, usedMonth);
 
           }
 
-          leaveCount[l.leaveCode] += value
-
         });
 
-        let unpaidLeaves = 0
+        //////////////////////////////////////////////////////
+        // LEAVE DEDUCTION
+        //////////////////////////////////////////////////////
+        const dailySalary = grossSalary / 30;
 
-        leaveTypes.forEach(type=>{
-
-          const used = leaveCount[type.code] || 0
-
-          if(used > type.yearlyLimit){
-
-            unpaidLeaves += used - type.yearlyLimit
-
-          }
-
-        });
-
-        const dailySalary = basicSalary / 30
-
-        const leaveDeduction = unpaidLeaves * dailySalary
+        const leaveDeduction = unpaidLeaves * dailySalary;
 
         //////////////////////////////////////////////////////
         // FINAL SALARY
         //////////////////////////////////////////////////////
         const netSalary =
-          basicSalary +
-          totalAllowance -
+          grossSalary -
           totalDeduction -
           leaveDeduction;
 
@@ -157,7 +196,15 @@ exports.runPayroll = async (req, res) => {
             ...payslip,
             employee: emp,
             allowanceList: allowances,
-            deductionList: deductions,
+            deductionList: [
+              ...deductions,
+              {
+                name: "Leave",
+                amount: leaveDeduction
+              }
+            ],
+            leaveSummary: monthLeaveCount,
+            unpaidLeaves,
             month,
             year
           },
@@ -165,7 +212,7 @@ exports.runPayroll = async (req, res) => {
         );
 
         //////////////////////////////////////////////////////
-        // UPLOAD TO CLOUDINARY
+        // UPLOAD PDF
         //////////////////////////////////////////////////////
         const pdfUrl = await cloudinaryUpload(
           pdfBuffer,
@@ -173,7 +220,7 @@ exports.runPayroll = async (req, res) => {
         );
 
         //////////////////////////////////////////////////////
-        // SAVE URL
+        // UPDATE PAYSLIP
         //////////////////////////////////////////////////////
         const updatedPayslip = await prisma.payslip.update({
           where: { id: payslip.id },
@@ -183,8 +230,12 @@ exports.runPayroll = async (req, res) => {
         return updatedPayslip;
 
       })
+
     );
 
+    //////////////////////////////////////////////////////
+    // RESPONSE
+    //////////////////////////////////////////////////////
     res.json({
       success: true,
       payroll,
@@ -196,8 +247,8 @@ exports.runPayroll = async (req, res) => {
     console.error("Payroll Error:", error);
 
     res.status(500).json({
-      success:false,
-      message:error.message
+      success: false,
+      message: error.message
     });
 
   }

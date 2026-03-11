@@ -2,6 +2,8 @@ module.exports = (payslip, settings) => {
 
 const allowances = payslip.allowanceList || [];
 const deductions = payslip.deductionList || [];
+const leaveSummary = payslip.leaveSummary || {};
+const unpaidLeaves = payslip.unpaidLeaves || 0;
 
 const totalAllowance = allowances.reduce(
   (sum,a)=>sum + Number(a.amount || 0),0
@@ -62,6 +64,7 @@ line-height:1.7;
 table{
 width:100%;
 border-collapse:collapse;
+margin-top:10px;
 }
 
 th,td{
@@ -82,6 +85,13 @@ text-align:right;
 font-weight:bold;
 }
 
+.section-title{
+margin-top:25px;
+font-size:18px;
+font-weight:bold;
+color:#2f5d8c;
+}
+
 .footer{
 text-align:center;
 margin-top:30px;
@@ -100,9 +110,9 @@ ${settings?.companyName || ""} – Private & Confidential
 </div>
 
 <div class="logo">
-${settings?.companyLogo 
-  ? `<img src="${settings.companyLogo}" style="width:200px;height:auto;" />`
-  : ""}
+  ${settings?.companyLogo 
+    ? `<img src="${settings.companyLogo}" style="width:200px;height:auto;" alt="Company Logo" />`
+    : ""}
 </div>
 
 </div>
@@ -114,7 +124,11 @@ ${settings?.companyLogo
 <div>
 <strong>Date :</strong> ${new Date().toLocaleDateString()}<br>
 <strong>Pay Period :</strong> ${payslip.month}/${payslip.year}<br>
-<strong>Date of Joining :</strong> ${payslip.employee?.joinDate || ""}
+<strong>Date of Joining :</strong> ${
+  payslip.employee?.joinDate 
+  ? new Date(payslip.employee.joinDate).toLocaleDateString() 
+  : ""
+}
 </div>
 
 <div>
@@ -136,7 +150,7 @@ ${settings?.companyLogo
 
 <tr>
 <td>Basic Pay</td>
-<td class="amount">${payslip.basicSalary}</td>
+<td class="amount">${Number(payslip.basicSalary).toLocaleString()}</td>
 <td></td>
 <td></td>
 </tr>
@@ -144,39 +158,64 @@ ${settings?.companyLogo
 ${allowances.map(a=>`
 <tr>
 <td>${a.name}</td>
-<td class="amount">${a.amount}</td>
+<td class="amount">${Number(a.amount).toLocaleString()}</td>
 <td></td>
 <td></td>
 </tr>
 `).join("")}
 
-${deductions.map(d=>`
+${deductions
+  .filter(d => Number(d.amount) > 0)
+  .map(d=>`
 <tr>
 <td></td>
 <td></td>
 <td>${d.name}</td>
-<td class="amount">${d.amount}</td>
+<td class="amount">${Number(d.amount).toLocaleString()}</td>
 </tr>
 `).join("")}
 
 <tr class="total">
 <td>Total Earnings</td>
-<td class="amount">${totalEarnings}</td>
+<td class="amount">${Number(totalEarnings).toLocaleString()}</td>
 <td>Total Deductions</td>
-<td class="amount">${totalDeduction}</td>
+<td class="amount">${Number(totalDeduction).toLocaleString()}</td>
 </tr>
 
 <tr class="total">
 <td colspan="3">Net Pay</td>
-<td class="amount">${payslip.netSalary}</td>
+<td class="amount">${Number(payslip.netSalary).toLocaleString()}</td>
+</tr>
+
+</table>
+
+<div class="section-title">Leave Summary</div>
+
+<table>
+
+<tr>
+<th>Leave Type</th>
+<th>Days Taken</th>
+</tr>
+
+${Object.entries(leaveSummary).map(([code,days])=>`
+<tr>
+<td>${code}</td>
+<td class="amount">${days}</td>
+</tr>
+`).join("")}
+
+<tr>
+<td><strong>Unpaid Leaves</strong></td>
+<td class="amount"><strong>${unpaidLeaves}</strong></td>
 </tr>
 
 </table>
 
 <div class="footer">
 
-<strong>Rs ${payslip.netSalary}</strong><br>
-Rupees ${payslip.netSalary} Only
+<strong>Rs ${Number(payslip.netSalary).toLocaleString()}</strong><br>
+Rupees ${Number(payslip.netSalary).toLocaleString()} Only
 
 <br><br>
 

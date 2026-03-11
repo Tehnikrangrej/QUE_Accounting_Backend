@@ -3,43 +3,63 @@ const prisma = require("../config/prisma");
 //////////////////////////////////////////////////////
 // CREATE EMPLOYEE
 //////////////////////////////////////////////////////
-  exports.createEmployee = async (req,res)=>{
 
-    try{
+//////////////////////////////////////////////////////
+// CREATE EMPLOYEE
+//////////////////////////////////////////////////////
+exports.createEmployee = async (req,res)=>{
 
-      const businessId = req.business.id;
+  try{
 
-      const employee = await prisma.employee.create({
-        data:{
-          businessId,
-          name:req.body.name,
-          email:req.body.email,
-          phone:req.body.phone,
-          designation:req.body.designation,
-          joinDate:req.body.joinDate,
-          basicSalary:Number(req.body.basicSalary),
+    const businessId = req.business.id;
 
-          allowance:req.body.allowance || [],
-          deduction:req.body.deduction || []
-        }
+    // 1️⃣ get settings
+    const settings = await prisma.settings.findUnique({
+      where:{ businessId }
+    });
+
+    // 2️⃣ build leave balance from leaveTypes
+    let leaveBalance = {};
+
+    if(settings?.leaveTypes){
+      settings.leaveTypes.forEach(leave=>{
+        leaveBalance[leave.code] = leave.yearlyLimit;
       });
-
-      res.json({
-        success:true,
-        data:employee
-      });
-
-    }catch(error){
-
-      res.status(500).json({
-        success:false,
-        message:error.message
-      });
-
     }
 
-  };
+    // 3️⃣ create employee
+    const employee = await prisma.employee.create({
+      data:{
+        businessId,
+        name:req.body.name,
+        email:req.body.email,
+        phone:req.body.phone,
+        designation:req.body.designation,
+        joinDate:new Date(req.body.joinDate),
+        basicSalary:Number(req.body.basicSalary),
 
+        allowance:req.body.allowance || [],
+        deduction:req.body.deduction || [],
+
+        leaveBalance
+      }
+    });
+
+    res.json({
+      success:true,
+      data:employee
+    });
+
+  }catch(error){
+
+    res.status(500).json({
+      success:false,
+      message:error.message
+    });
+
+  }
+
+};
 //////////////////////////////////////////////////////
 // GET ALL EMPLOYEES
 //////////////////////////////////////////////////////
@@ -65,7 +85,8 @@ exports.getAllEmployees = async (req,res)=>{
 exports.getEmployee = async (req,res)=>{
 
   const employee = await prisma.employee.findUnique({
-    where:{ id:req.params.id }
+    where:{ id:req.params.id },
+    include:{leaves:true}
   });
 
   res.json({

@@ -47,6 +47,57 @@ exports.saveSettings = async (req, res) => {
       data.signatureUrl = req.files.signature[0].path;
     }
 
+   //////////////////////////////////////////////////////
+// HANDLE LEAVE TYPES
+//////////////////////////////////////////////////////
+
+let leaveTypes = data.leaveTypes || [];
+
+// if frontend sends JSON string
+if (typeof leaveTypes === "string") {
+  leaveTypes = JSON.parse(leaveTypes);
+}
+
+// remove any existing LWP to prevent duplicates
+leaveTypes = leaveTypes.filter(l => l.code !== "LWP");
+
+// add protected LWP
+leaveTypes.push({
+  code: "LWP",
+  name: "Unpaid Leave",
+  yearlyLimit: null,
+  system: true
+});
+
+data.leaveTypes = leaveTypes;
+
+    // Ensure LWP always exists
+    const lwpExists = leaveTypes.some(l => l.code === "LWP");
+
+    if (!lwpExists) {
+      leaveTypes.push({
+        code: "LWP",
+        name: "Unpaid Leave",
+        yearlyLimit: null,
+        system: true
+      });
+    }
+
+    // Prevent deletion of LWP
+    leaveTypes = leaveTypes.map(l => {
+      if (l.code === "LWP") {
+        return {
+          code: "LWP",
+          name: "Unpaid Leave",
+          yearlyLimit: null,
+          system: true
+        };
+      }
+      return l;
+    });
+
+    data.leaveTypes = leaveTypes;
+
     //////////////////////////////////////////////////////
     // CHECK EXISTING SETTINGS
     //////////////////////////////////////////////////////
