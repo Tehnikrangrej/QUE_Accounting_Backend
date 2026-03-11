@@ -110,9 +110,9 @@ ${settings?.companyName || ""} – Private & Confidential
 </div>
 
 <div class="logo">
-  ${settings?.companyLogo 
-    ? `<img src="${settings.companyLogo}" style="width:200px;height:auto;" alt="Company Logo" />`
-    : ""}
+${settings?.companyLogo 
+  ? `<img src="${settings.companyLogo}" style="width:200px;height:auto;" alt="Company Logo" />`
+  : ""}
 </div>
 
 </div>
@@ -198,17 +198,21 @@ ${deductions
 <th>Days Taken</th>
 </tr>
 
-${Object.entries(leaveSummary).map(([code,days])=>`
+${Object.entries(leaveSummary)
+.filter(([code,days]) => code !== "LWP" && days > 0)
+.map(([code,days])=>`
 <tr>
 <td>${code}</td>
 <td class="amount">${days}</td>
 </tr>
 `).join("")}
 
+${unpaidLeaves > 0 ? `
 <tr>
 <td><strong>Unpaid Leaves</strong></td>
 <td class="amount"><strong>${unpaidLeaves}</strong></td>
 </tr>
+` : ""}
 
 </table>
 
