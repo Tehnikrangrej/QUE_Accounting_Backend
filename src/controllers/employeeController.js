@@ -55,7 +55,7 @@ exports.createEmployee = async (req,res)=>{
     //////////////////////////////////////////////////////
     // HASH PASSWORD
     //////////////////////////////////////////////////////
-    const password = await bcrypt.hash(req.body.password,10);
+    const hashedPassword = await bcrypt.hash(req.body.password,10);
 
     //////////////////////////////////////////////////////
     // GET OR CREATE EMPLOYEE ROLE
@@ -82,14 +82,15 @@ exports.createEmployee = async (req,res)=>{
     const result = await prisma.$transaction(async(tx)=>{
 
       /////////////////////////////////////////////////
-      // CREATE USER
+      // CREATE USER (LOGIN ACCOUNT)
       /////////////////////////////////////////////////
       const user = await tx.user.create({
         data:{
           name:req.body.name,
           email:req.body.email,
-          password,
-          role:"EMPLOYEE"
+          password:hashedPassword,
+          role:"EMPLOYEE",
+          activeBusinessId:businessId
         }
       });
 
@@ -113,7 +114,6 @@ exports.createEmployee = async (req,res)=>{
           userId:user.id,
           name:req.body.name,
           email:req.body.email,
-          password:req.body.password,
           phone:req.body.phone,
           designation:req.body.designation,
           joinDate:req.body.joinDate ? new Date(req.body.joinDate) : null,
@@ -135,6 +135,7 @@ exports.createEmployee = async (req,res)=>{
     //////////////////////////////////////////////////////
     res.json({
       success:true,
+      message:"Employee created successfully",
       data:result
     });
 
