@@ -34,11 +34,13 @@
 
     @@map("users")
       settings Settings[]
+    employees Employee?
 }
 
   enum UserRole {
     USER
     ADMIN
+    EMPLOYEE
     SUPER_ADMIN
   }
 
@@ -448,6 +450,7 @@ enum CreditNoteStatus {
 model Employee {
   id          String   @id @default(uuid())
   businessId  String
+  userId    String? @unique
   name        String
   email       String?
   phone       String?
@@ -459,6 +462,7 @@ model Employee {
   leaveBalance Json?
 
    business Business @relation(fields: [businessId], references: [id])
+    user User? @relation(fields: [userId], references: [id])
 
   createdAt   DateTime @default(now())
 

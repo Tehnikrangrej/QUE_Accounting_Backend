@@ -1,19 +1,30 @@
 const prisma = require("../config/prisma");
 
 //////////////////////////////////////////////////////
-// CREATE LEAVE
+// CREATE LEAVE (EMPLOYEE SELF REQUEST)
 //////////////////////////////////////////////////////
 exports.createLeave = async (req, res) => {
 
   try {
 
     const businessId = req.business.id;
-    const { employeeId, leaveCode, date, duration } = req.body;
 
-    if (!employeeId || !leaveCode || !date || !duration) {
+    // ⭐ EMPLOYEE ID FROM TOKEN
+    const employeeId = req.user?.employeeId;
+
+    if (!employeeId) {
+      return res.status(401).json({
+        success: false,
+        message: "Employee authentication required"
+      });
+    }
+
+    const { leaveCode, date, duration } = req.body;
+
+    if (!leaveCode || !date || !duration) {
       return res.status(400).json({
-        success:false,
-        message:"Missing required fields"
+        success: false,
+        message: "Missing required fields"
       });
     }
 
@@ -23,13 +34,13 @@ exports.createLeave = async (req, res) => {
     // CHECK EMPLOYEE
     //////////////////////////////////////////////////////
     const employee = await prisma.employee.findUnique({
-      where:{ id: employeeId }
+      where: { id: employeeId }
     });
 
-    if(!employee){
+    if (!employee) {
       return res.status(404).json({
-        success:false,
-        message:"Employee not found"
+        success: false,
+        message: "Employee not found"
       });
     }
 
@@ -37,47 +48,48 @@ exports.createLeave = async (req, res) => {
     // PREVENT MULTIPLE LEAVES SAME DATE
     //////////////////////////////////////////////////////
     const startOfDay = new Date(leaveDate);
-    startOfDay.setHours(0,0,0,0);
+    startOfDay.setHours(0, 0, 0, 0);
 
     const endOfDay = new Date(leaveDate);
-    endOfDay.setHours(23,59,59,999);
+    endOfDay.setHours(23, 59, 59, 999);
 
     const existingLeave = await prisma.leave.findFirst({
-      where:{
+      where: {
         employeeId,
-        date:{
-          gte:startOfDay,
-          lte:endOfDay
+        date: {
+          gte: startOfDay,
+          lte: endOfDay
         }
       }
     });
 
-    if(existingLeave){
+    if (existingLeave) {
       return res.status(400).json({
-        success:false,
-        message:"Employee already has leave on this date"
+        success: false,
+        message: "You already applied leave on this date"
       });
     }
 
     //////////////////////////////////////////////////////
     // LEAVE BALANCE CHECK
     //////////////////////////////////////////////////////
-    let leaveBalance = employee.leaveBalance || {};
+    let leaveBalance = { ...(employee.leaveBalance || {}) };
+
     const deduction = duration === "HALF" ? 0.5 : 1;
 
-    if(leaveCode !== "LWP"){
+    if (leaveCode !== "LWP") {
 
-      if(leaveBalance[leaveCode] === undefined){
+      if (leaveBalance[leaveCode] === undefined) {
         return res.status(400).json({
-          success:false,
-          message:"Invalid leave type"
+          success: false,
+          message: "Invalid leave type"
         });
       }
 
-      if(leaveBalance[leaveCode] < deduction){
+      if (leaveBalance[leaveCode] < deduction) {
         return res.status(400).json({
-          success:false,
-          message:`${leaveCode} balance finished. Use LWP`
+          success: false,
+          message: `${leaveCode} balance finished. Use LWP`
         });
       }
 
@@ -89,38 +101,39 @@ exports.createLeave = async (req, res) => {
     // CREATE LEAVE
     //////////////////////////////////////////////////////
     const leave = await prisma.leave.create({
-      data:{
+      data: {
         businessId,
         employeeId,
         leaveCode,
         duration,
-        date:leaveDate
+        date: leaveDate
       }
     });
 
     //////////////////////////////////////////////////////
-    // UPDATE BALANCE (NOT FOR LWP)
+    // UPDATE BALANCE
     //////////////////////////////////////////////////////
-    if(leaveCode !== "LWP"){
+    if (leaveCode !== "LWP") {
       await prisma.employee.update({
-        where:{ id:employeeId },
-        data:{ leaveBalance }
+        where: { id: employeeId },
+        data: { leaveBalance }
       });
     }
 
     res.json({
-      success:true,
-      data:leave,
-      updatedLeaveBalance:leaveBalance
+      success: true,
+      message: "Leave created successfully",
+      data: leave,
+      updatedLeaveBalance: leaveBalance
     });
 
-  } catch(error){
+  } catch (error) {
 
     console.error(error);
 
     res.status(500).json({
-      success:false,
-      message:error.message
+      success: false,
+      message: error.message
     });
 
   }
@@ -130,42 +143,42 @@ exports.createLeave = async (req, res) => {
 //////////////////////////////////////////////////////
 // GET ALL LEAVES
 //////////////////////////////////////////////////////
-exports.getLeaves = async (req,res)=>{
+exports.getLeaves = async (req, res) => {
 
-  try{
+  try {
 
     const businessId = req.business.id;
 
     const leaves = await prisma.leave.findMany({
 
-      where:{ businessId },
+      where: { businessId },
 
-      include:{
-        employee:{
-          select:{
-            id:true,
-            name:true,
-            designation:true
+      include: {
+        employee: {
+          select: {
+            id: true,
+            name: true,
+            designation: true
           }
         }
       },
 
-      orderBy:{
-        date:"desc"
+      orderBy: {
+        date: "desc"
       }
 
     });
 
     res.json({
-      success:true,
-      data:leaves
+      success: true,
+      data: leaves
     });
 
-  }catch(error){
+  } catch (error) {
 
     res.status(500).json({
-      success:false,
-      message:error.message
+      success: false,
+      message: error.message
     });
 
   }

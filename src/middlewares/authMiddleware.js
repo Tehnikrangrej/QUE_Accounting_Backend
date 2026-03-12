@@ -32,8 +32,7 @@ const authMiddleware = async (req, res, next) => {
     }
 
     //////////////////////////////////////////////////////
-    // ⭐ SUBSCRIPTION ADMIN (ENV LOGIN)
-    // NO DATABASE LOOKUP
+    // ⭐ SUBSCRIPTION ADMIN
     //////////////////////////////////////////////////////
     if (payload.userId === "subscription-admin") {
       req.user = {
@@ -42,13 +41,14 @@ const authMiddleware = async (req, res, next) => {
         role: payload.role,
         isActive: true,
         activeBusinessId: null,
+        employeeId: null
       };
 
       return next();
     }
 
     //////////////////////////////////////////////////////
-    // NORMAL USERS → LOAD FROM DATABASE
+    // NORMAL USER
     //////////////////////////////////////////////////////
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
@@ -76,6 +76,18 @@ const authMiddleware = async (req, res, next) => {
     }
 
     //////////////////////////////////////////////////////
+    // ⭐ CHECK IF USER IS EMPLOYEE
+    //////////////////////////////////////////////////////
+    const employee = await prisma.employee.findFirst({
+      where: {
+        userId: user.id
+      },
+      select: {
+        id: true
+      }
+    });
+
+    //////////////////////////////////////////////////////
     // FINAL USER OBJECT
     //////////////////////////////////////////////////////
     req.user = {
@@ -84,6 +96,7 @@ const authMiddleware = async (req, res, next) => {
       role: user.role,
       isActive: user.isActive,
       activeBusinessId: user.activeBusinessId || null,
+      employeeId: employee ? employee.id : null   // ⭐ IMPORTANT
     };
 
     next();

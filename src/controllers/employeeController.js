@@ -1,8 +1,5 @@
 const prisma = require("../config/prisma");
-
-//////////////////////////////////////////////////////
-// CREATE EMPLOYEE
-//////////////////////////////////////////////////////
+const bcrypt = require("bcryptjs");
 
 //////////////////////////////////////////////////////
 // CREATE EMPLOYEE
@@ -13,12 +10,40 @@ exports.createEmployee = async (req,res)=>{
 
     const businessId = req.business.id;
 
-    // 1️⃣ get settings
+    //////////////////////////////////////////////////////
+    // CHECK EMAIL ALREADY EXISTS
+    //////////////////////////////////////////////////////
+    const existingUser = await prisma.user.findUnique({
+      where:{ email:req.body.email }
+    });
+
+    if(existingUser){
+      return res.status(400).json({
+        success:false,
+        message:"Email already used"
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // PASSWORD VALIDATION
+    //////////////////////////////////////////////////////
+    if(!req.body.password){
+      return res.status(400).json({
+        success:false,
+        message:"Password is required"
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // GET SETTINGS
+    //////////////////////////////////////////////////////
     const settings = await prisma.settings.findUnique({
       where:{ businessId }
     });
 
-    // 2️⃣ build leave balance from leaveTypes
+    //////////////////////////////////////////////////////
+    // BUILD LEAVE BALANCE
+    //////////////////////////////////////////////////////
     let leaveBalance = {};
 
     if(settings?.leaveTypes){
@@ -27,30 +52,95 @@ exports.createEmployee = async (req,res)=>{
       });
     }
 
-    // 3️⃣ create employee
-    const employee = await prisma.employee.create({
-      data:{
+    //////////////////////////////////////////////////////
+    // HASH PASSWORD
+    //////////////////////////////////////////////////////
+    const password = await bcrypt.hash(req.body.password,10);
+
+    //////////////////////////////////////////////////////
+    // GET OR CREATE EMPLOYEE ROLE
+    //////////////////////////////////////////////////////
+    let employeeRole = await prisma.role.findFirst({
+      where:{
         businessId,
-        name:req.body.name,
-        email:req.body.email,
-        phone:req.body.phone,
-        designation:req.body.designation,
-        joinDate:new Date(req.body.joinDate),
-        basicSalary:Number(req.body.basicSalary),
-
-        allowance:req.body.allowance || [],
-        deduction:req.body.deduction || [],
-
-        leaveBalance
+        name:"Employee"
       }
     });
 
+    if(!employeeRole){
+      employeeRole = await prisma.role.create({
+        data:{
+          name:"Employee",
+          businessId
+        }
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // TRANSACTION
+    //////////////////////////////////////////////////////
+    const result = await prisma.$transaction(async(tx)=>{
+
+      /////////////////////////////////////////////////
+      // CREATE USER
+      /////////////////////////////////////////////////
+      const user = await tx.user.create({
+        data:{
+          name:req.body.name,
+          email:req.body.email,
+          password,
+          role:"EMPLOYEE"
+        }
+      });
+
+      /////////////////////////////////////////////////
+      // ADD USER TO BUSINESS
+      /////////////////////////////////////////////////
+      await tx.businessUser.create({
+        data:{
+          userId:user.id,
+          businessId,
+          roleId:employeeRole.id
+        }
+      });
+
+      /////////////////////////////////////////////////
+      // CREATE EMPLOYEE
+      /////////////////////////////////////////////////
+      const employee = await tx.employee.create({
+        data:{
+          businessId,
+          userId:user.id,
+          name:req.body.name,
+          email:req.body.email,
+          password:req.body.password,
+          phone:req.body.phone,
+          designation:req.body.designation,
+          joinDate:req.body.joinDate ? new Date(req.body.joinDate) : null,
+          basicSalary:Number(req.body.basicSalary),
+
+          allowance:req.body.allowance || [],
+          deduction:req.body.deduction || [],
+
+          leaveBalance
+        }
+      });
+
+      return employee;
+
+    });
+
+    //////////////////////////////////////////////////////
+    // RESPONSE
+    //////////////////////////////////////////////////////
     res.json({
       success:true,
-      data:employee
+      data:result
     });
 
   }catch(error){
+
+    console.error(error);
 
     res.status(500).json({
       success:false,
@@ -60,6 +150,7 @@ exports.createEmployee = async (req,res)=>{
   }
 
 };
+
 //////////////////////////////////////////////////////
 // GET ALL EMPLOYEES
 //////////////////////////////////////////////////////
@@ -118,9 +209,25 @@ exports.updateEmployee = async (req,res)=>{
 //////////////////////////////////////////////////////
 exports.deleteEmployee = async (req,res)=>{
 
-  await prisma.employee.delete({
+  const employee = await prisma.employee.findUnique({
     where:{ id:req.params.id }
   });
+
+  if(!employee){
+    return res.status(404).json({
+      success:false,
+      message:"Employee not found"
+    });
+  }
+
+  await prisma.$transaction([
+    prisma.employee.delete({
+      where:{ id:req.params.id }
+    }),
+    prisma.user.delete({
+      where:{ id:employee.userId }
+    })
+  ]);
 
   res.json({
     success:true,

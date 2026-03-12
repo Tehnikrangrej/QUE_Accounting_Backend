@@ -42,7 +42,7 @@ exports.login = async (req, res) => {
     const { email, password } = req.body;
 
     //////////////////////////////////////////////////////
-    // ⭐ SUBSCRIPTION ADMIN LOGIN
+    // SUBSCRIPTION ADMIN LOGIN
     //////////////////////////////////////////////////////
     if (
       email === process.env.SUBSCRIPTION_ADMIN_EMAIL &&
@@ -54,6 +54,7 @@ exports.login = async (req, res) => {
         role: "SUPER_ADMIN",
         isActive: true,
         isSubscriptionAdmin: true,
+        employeeId: null
       });
 
       return res.json({
@@ -65,7 +66,7 @@ exports.login = async (req, res) => {
     }
 
     //////////////////////////////////////////////////////
-    // ⭐ NORMAL USER LOGIN
+    // NORMAL USER LOGIN
     //////////////////////////////////////////////////////
     let user = await prisma.user.findUnique({
       where: { email },
@@ -83,11 +84,10 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
 
     //////////////////////////////////////////////////////
-    // ⭐ AUTO ACTIVATE BUSINESS ONLY FOR INVITED USERS
+    // AUTO ACTIVATE BUSINESS ONLY FOR INVITED USERS
     //////////////////////////////////////////////////////
     if (!user.activeBusinessId) {
 
-      // check if user has been invited (membership exists)
       const invitedMembership = await prisma.businessUser.findFirst({
         where: {
           userId: user.id,
@@ -98,7 +98,6 @@ exports.login = async (req, res) => {
         },
       });
 
-      // only invited users get active business
       if (invitedMembership) {
         user = await prisma.user.update({
           where: { id: user.id },
@@ -111,7 +110,15 @@ exports.login = async (req, res) => {
     }
 
     //////////////////////////////////////////////////////
-    // ⭐ GENERATE TOKEN
+    // CHECK IF USER IS EMPLOYEE
+    //////////////////////////////////////////////////////
+    const employee = await prisma.employee.findFirst({
+      where: { userId: user.id },
+      select: { id: true }
+    });
+
+    //////////////////////////////////////////////////////
+    // GENERATE TOKEN
     //////////////////////////////////////////////////////
     const token = generateToken({
       userId: user.id,
@@ -119,6 +126,7 @@ exports.login = async (req, res) => {
       role: user.role || "USER",
       isActive: user.isActive ?? true,
       activeBusinessId: user.activeBusinessId,
+      employeeId: employee?.id || null
     });
 
     //////////////////////////////////////////////////////
@@ -129,6 +137,7 @@ exports.login = async (req, res) => {
       token,
       businesses: user.memberships,
       activeBusinessId: user.activeBusinessId,
+      employeeId: employee ? employee.id : null
     });
 
   } catch (err) {
