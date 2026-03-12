@@ -7,7 +7,7 @@ const checkBusinessSubscription = require("../middlewares/subscriptionMiddleware
 const checkPermission = require("../middlewares/checkPermission");
 
 router.post("/", authMiddleware, businessMiddleware, checkBusinessSubscription, /*checkPermission("Leave","create"),*/ leaveController.createLeave);
-
+router.get("/me", authMiddleware, businessMiddleware, checkBusinessSubscription, /*checkPermission("Leave","view"),*/ leaveController.getMyLeaves);
 router.get("/", authMiddleware, businessMiddleware, checkBusinessSubscription, /*checkPermission("Leave","read"),*/ leaveController.getLeaves);
 router.put(
   "/:id/status",

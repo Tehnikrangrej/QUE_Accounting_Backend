@@ -235,3 +235,47 @@ exports.updateLeaveStatus = async (req,res)=>{
   }
 
 };
+
+//////////////////////////////////////////////////////
+// GET MY LEAVES (LOGGED IN EMPLOYEE)
+//////////////////////////////////////////////////////
+exports.getMyLeaves = async (req,res)=>{
+
+  try{
+
+    const employeeId = req.user.employeeId;
+
+    if(!employeeId){
+      return res.status(401).json({
+        success:false,
+        message:"Employee authentication required"
+      });
+    }
+
+    const leaves = await prisma.leave.findMany({
+
+      where:{
+        employeeId
+      },
+
+      orderBy:{
+        date:"desc"
+      }
+
+    });
+
+    res.json({
+      success:true,
+      data:leaves
+    });
+
+  }catch(error){
+
+    res.status(500).json({
+      success:false,
+      message:error.message
+    });
+
+  }
+
+};
