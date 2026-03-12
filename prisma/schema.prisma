@@ -511,6 +511,7 @@ model Leave {
   leaveCode   String
   date        DateTime
   duration    String   // FULL | HALF
+  status     String   @default("PENDING")
 
   employee    Employee @relation(fields: [employeeId], references: [id])
 

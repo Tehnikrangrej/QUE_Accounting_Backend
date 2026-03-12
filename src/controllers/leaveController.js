@@ -184,3 +184,54 @@ exports.getLeaves = async (req, res) => {
   }
 
 };
+
+exports.updateLeaveStatus = async (req,res)=>{
+
+  try{
+
+    const businessId = req.business.id;
+    const leaveId = req.params.id;
+    const { status } = req.body;
+
+    if(!["APPROVED","REJECTED"].includes(status)){
+      return res.status(400).json({
+        success:false,
+        message:"Invalid status"
+      });
+    }
+
+    const leave = await prisma.leave.findFirst({
+      where:{
+        id: leaveId,
+        businessId
+      }
+    });
+
+    if(!leave){
+      return res.status(404).json({
+        success:false,
+        message:"Leave not found"
+      });
+    }
+
+    const updatedLeave = await prisma.leave.update({
+      where:{ id:leaveId },
+      data:{ status }
+    });
+
+    res.json({
+      success:true,
+      message:`Leave ${status.toLowerCase()} successfully`,
+      data:updatedLeave
+    });
+
+  }catch(error){
+
+    res.status(500).json({
+      success:false,
+      message:error.message
+    });
+
+  }
+
+};

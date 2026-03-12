@@ -98,7 +98,10 @@ const authMiddleware = async (req, res, next) => {
       activeBusinessId: user.activeBusinessId || null,
       employeeId: employee ? employee.id : null   // ⭐ IMPORTANT
     };
-
+   // ⭐ ADD THIS
+req.business = {
+  id: user.activeBusinessId
+};
     next();
 
   } catch (err) {
