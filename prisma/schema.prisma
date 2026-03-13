@@ -461,6 +461,11 @@ model Employee {
   deduction    Json?
   leaveBalance Json?
 
+  bankName          String?
+  accountNumber     String?
+  Code          String?
+  accountHolderName String?
+
    business Business @relation(fields: [businessId], references: [id])
     user User? @relation(fields: [userId], references: [id])
 
@@ -469,6 +474,8 @@ model Employee {
   payslips    Payslip[]
 
   leaves Leave[]
+
+  bankChangeRequests BankChangeRequest[]
 }
 
 model Payslip {
@@ -516,4 +523,28 @@ model Leave {
   employee    Employee @relation(fields: [employeeId], references: [id])
 
   createdAt   DateTime @default(now())
+}
+
+model BankChangeRequest {
+  id                String @id @default(uuid())
+
+  employeeId        String
+  businessId        String
+
+  bankName          String
+  accountNumber     String
+  Code          String
+  accountHolderName String
+
+  status RequestStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
