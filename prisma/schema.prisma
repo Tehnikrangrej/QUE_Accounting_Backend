@@ -533,6 +533,7 @@ model BankChangeRequest {
 
   bankName          String
   accountNumber     String
+  country        String
   Code          String
   accountHolderName String
 
