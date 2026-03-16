@@ -10,7 +10,7 @@ exports.createBankChangeRequest = async (req,res)=>{
     const employeeId = req.user.employeeId;
     const businessId = req.business.id;
 
-    const { bankName, accountNumber, Code, accountHolderName } = req.body;
+    const { bankName, accountNumber, Code, accountHolderName, country } = req.body;
 
     const request = await prisma.bankChangeRequest.create({
       data:{
@@ -19,7 +19,8 @@ exports.createBankChangeRequest = async (req,res)=>{
         bankName,
         accountNumber,
         Code,
-        accountHolderName
+        accountHolderName,
+        country
       }
     });
 
