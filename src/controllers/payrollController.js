@@ -58,6 +58,26 @@ exports.runPayroll = async (req, res) => {
         const basicSalary = emp.basicSalary;
 
         //////////////////////////////////////////////////////
+        // LOAN DEDUCTION
+        //////////////////////////////////////////////////////
+        const loan = await prisma.loan.findFirst({
+          where: {
+            employeeId: emp.id,
+            businessId,
+            status: "active",
+          },
+        });
+
+        let loanDeduction = 0;
+
+        if (loan && loan.remainingAmount > 0) {
+          loanDeduction = Math.min(
+            loan.emiAmount,
+            loan.remainingAmount
+          );
+        }
+
+        //////////////////////////////////////////////////////
         // ALLOWANCES
         //////////////////////////////////////////////////////
         const allowances = Array.isArray(emp.allowance)
@@ -81,7 +101,7 @@ exports.runPayroll = async (req, res) => {
         const grossSalary = basicSalary + totalAllowance;
 
         //////////////////////////////////////////////////////
-        // 🔥 OVERTIME CALCULATION (ADDED)
+        // OVERTIME
         //////////////////////////////////////////////////////
         const startDate = new Date(year, month - 1, 1);
         const endDate = new Date(year, month, 0);
@@ -95,9 +115,7 @@ exports.runPayroll = async (req, res) => {
               lte: endDate,
             },
           },
-          _sum: {
-            overtimeHours: true,
-          },
+          _sum: { overtimeHours: true },
         });
 
         const totalOvertimeHours =
@@ -114,7 +132,7 @@ exports.runPayroll = async (req, res) => {
           totalOvertimeHours * hourlyRate * multiplier;
 
         //////////////////////////////////////////////////////
-        // FILTER LEAVES
+        // LEAVES
         //////////////////////////////////////////////////////
         const monthLeaves = emp.leaves.filter(l => {
           const d = new Date(l.date);
@@ -129,9 +147,6 @@ exports.runPayroll = async (req, res) => {
           return d.getFullYear() === year;
         });
 
-        //////////////////////////////////////////////////////
-        // LEAVE COUNTS
-        //////////////////////////////////////////////////////
         let monthLeaveCount = {};
         let yearLeaveCount = {};
         let unpaidLeaves = 0;
@@ -160,11 +175,7 @@ exports.runPayroll = async (req, res) => {
           yearLeaveCount[l.leaveCode] += value;
         });
 
-        //////////////////////////////////////////////////////
-        // CHECK YEARLY LIMIT
-        //////////////////////////////////////////////////////
         leaveTypes.forEach(type => {
-
           if (type.code === "LWP") return;
 
           const usedYear = yearLeaveCount[type.code] || 0;
@@ -177,7 +188,6 @@ exports.runPayroll = async (req, res) => {
             const exceeded = usedYear - type.yearlyLimit;
             unpaidLeaves += Math.min(exceeded, usedMonth);
           }
-
         });
 
         //////////////////////////////////////////////////////
@@ -187,13 +197,14 @@ exports.runPayroll = async (req, res) => {
         const leaveDeduction = unpaidLeaves * dailySalary;
 
         //////////////////////////////////////////////////////
-        // FINAL SALARY (UPDATED WITH OVERTIME)
+        // FINAL SALARY
         //////////////////////////////////////////////////////
         const netSalary =
           grossSalary +
-          overtimePay - // 🔥 ADDED
+          overtimePay -
           totalDeduction -
-          leaveDeduction;
+          leaveDeduction -
+          loanDeduction;
 
         //////////////////////////////////////////////////////
         // CREATE PAYSLIP
@@ -204,13 +215,29 @@ exports.runPayroll = async (req, res) => {
             employeeId: emp.id,
             employeeName: emp.name,
             basicSalary,
-            allowance: totalAllowance,
-            deduction: totalDeduction + leaveDeduction,
-            overtimePay, // 🔥 ADDED
+            allowance: totalAllowance + overtimePay,
+            deduction: totalDeduction + leaveDeduction + loanDeduction,
+            overtimePay,
+            loanDeduction, // 🔥 ADDED
             netSalary,
             status: "pending"
           }
         });
+
+        //////////////////////////////////////////////////////
+        // 🔥 UPDATE LOAN AFTER EMI
+        //////////////////////////////////////////////////////
+        if (loan && loanDeduction > 0) {
+          const newRemaining = loan.remainingAmount - loanDeduction;
+
+          await prisma.loan.update({
+            where: { id: loan.id },
+            data: {
+              remainingAmount: newRemaining,
+              status: newRemaining <= 0 ? "completed" : "active",
+            },
+          });
+        }
 
         //////////////////////////////////////////////////////
         // GENERATE PDF
@@ -222,18 +249,15 @@ exports.runPayroll = async (req, res) => {
             allowanceList: allowances,
             deductionList: [
               ...deductions,
-              {
-                name: "Leave",
-                amount: leaveDeduction
-              }
+              { name: "Leave", amount: leaveDeduction },
+              { name: "Loan EMI", amount: loanDeduction } // 🔥 ADDED
             ],
             leaveSummary: monthLeaveCount,
             unpaidLeaves,
             month,
             year,
-
-            overtimePay,          // 🔥 ADDED
-            totalOvertimeHours    // 🔥 ADDED
+            overtimePay,
+            totalOvertimeHours
           },
           settings
         );

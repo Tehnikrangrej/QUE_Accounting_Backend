@@ -480,6 +480,8 @@ model Employee {
   bankChangeRequests BankChangeRequest[]
 
   overtimes Overtime[]
+
+  loans Loan[]
 }
 
 model Payslip {
@@ -495,6 +497,7 @@ model Payslip {
   status      String  @default("pending")
   pdfUrl      String?
    overtimePay   Float   @default(0)
+   loanDeduction Float @default(0)
 
   createdAt   DateTime @default(now())
 
@@ -570,4 +573,21 @@ model Overtime {
   business Business @relation(fields: [businessId], references: [id])
 
   @@index([businessId, employeeId])
+}
+
+model Loan {
+  id              String   @id @default(uuid())
+  employeeId      String
+  businessId      String
+
+  totalAmount     Float
+  remainingAmount Float
+  emiAmount       Float
+
+  startDate       DateTime
+  status          String   @default("active") // active, completed
+
+  createdAt       DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id])
 }

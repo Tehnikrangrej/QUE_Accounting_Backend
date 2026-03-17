@@ -5,7 +5,7 @@ const deductions = payslip.deductionList || [];
 const leaveSummary = payslip.leaveSummary || {};
 const unpaidLeaves = payslip.unpaidLeaves || 0;
 
-// 🔥 OVERTIME ADDED
+// 🔥 OVERTIME
 const overtimePay = payslip.overtimePay || 0;
 const totalOvertimeHours = payslip.totalOvertimeHours || 0;
 
@@ -17,11 +17,13 @@ const totalDeduction = deductions.reduce(
   (sum,d)=>sum + Number(d.amount || 0),0
 );
 
-// 🔥 UPDATED TOTAL EARNINGS
+// 🔥 TOTALS
 const totalEarnings =
   payslip.basicSalary +
   totalAllowance +
   overtimePay;
+
+const finalTotalDeduction = totalDeduction; // ✅ FIXED
 
 return `
 <!DOCTYPE html>
@@ -172,7 +174,7 @@ ${allowances.map(a=>`
 </tr>
 `).join("")}
 
-<!-- 🔥 OVERTIME ROW -->
+<!-- 🔥 OVERTIME -->
 ${overtimePay > 0 ? `
 <tr>
 <td>
@@ -184,6 +186,7 @@ Overtime ${totalOvertimeHours ? `(${totalOvertimeHours} hrs)` : ""}
 </tr>
 ` : ""}
 
+<!-- 🔥 DEDUCTIONS (INCLUDING LOAN EMI FROM CONTROLLER) -->
 ${deductions
   .filter(d => Number(d.amount) > 0)
   .map(d=>`
@@ -199,7 +202,7 @@ ${deductions
 <td>Total Earnings</td>
 <td class="amount">${Number(totalEarnings).toLocaleString()}</td>
 <td>Total Deductions</td>
-<td class="amount">${Number(totalDeduction).toLocaleString()}</td>
+<td class="amount">${Number(finalTotalDeduction).toLocaleString()}</td>
 </tr>
 
 <tr class="total">

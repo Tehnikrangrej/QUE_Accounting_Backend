@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const overtimeController = require("../controllers/overtime");
+const loanController = require("../controllers/loan");
 
 const authMiddleware = require("../middlewares/authMiddleware");
 const businessMiddleware = require("../middlewares/business.middleware");
@@ -9,63 +9,63 @@ const checkBusinessSubscription = require("../middlewares/subscriptionMiddleware
 const checkPermission = require("../middlewares/checkPermission");
 
 //////////////////////////////////////////////////////
-// CREATE OVERTIME
+// CREATE LOAN
 //////////////////////////////////////////////////////
 router.post(
   "/",
   authMiddleware,
   businessMiddleware,
   checkBusinessSubscription,
-  checkPermission("Overtime", "create"),
-  overtimeController.createOvertime
+  checkPermission("Loans", "create"), // 🔥 permission
+  loanController.createLoan
 );
 
 //////////////////////////////////////////////////////
-// GET ALL OVERTIME
+// GET ALL LOANS
 //////////////////////////////////////////////////////
 router.get(
   "/",
   authMiddleware,
   businessMiddleware,
   checkBusinessSubscription,
-  checkPermission("Overtime", "view"),
-  overtimeController.getAllOvertime
+  checkPermission("Loans", "view"), // 🔥 permission
+  loanController.getLoans
 );
 
 //////////////////////////////////////////////////////
-// GET SINGLE OVERTIME
+// GET SINGLE LOAN
 //////////////////////////////////////////////////////
 router.get(
   "/:id",
   authMiddleware,
   businessMiddleware,
   checkBusinessSubscription,
-  checkPermission("Overtime", "view"),
-  overtimeController.getSingleOvertime
+  checkPermission("Loans", "view"),
+  loanController.getLoan
 );
 
 //////////////////////////////////////////////////////
-// UPDATE OVERTIME
+// UPDATE LOAN
 //////////////////////////////////////////////////////
-router.put(
+router.patch(
   "/:id",
   authMiddleware,
   businessMiddleware,
   checkBusinessSubscription,
-  checkPermission("Overtime", "update"),
-  overtimeController.updateOvertime
+  checkPermission("Loans", "update"),
+  loanController.updateLoan
 );
 
 //////////////////////////////////////////////////////
-// DELETE OVERTIME
+// DELETE LOAN
 //////////////////////////////////////////////////////
 router.delete(
   "/:id",
   authMiddleware,
   businessMiddleware,
   checkBusinessSubscription,
-  checkPermission("Overtime", "delete"),
-  overtimeController.deleteOvertime
+  checkPermission("Loans", "delete"),
+  loanController.deleteLoan
 );
 
 module.exports = router;
