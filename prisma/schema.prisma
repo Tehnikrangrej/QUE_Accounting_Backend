@@ -68,6 +68,7 @@
     payments Payment[]
     creditNotes CreditNote[]
     employees Employee[]
+    overtimes Overtime[]
 }
 
   //////////////////////////////////////////////////////
@@ -364,6 +365,7 @@ model Settings {
   invoiceFormat String @default("INV-YYYY-MM-DD-COUNT")
    signatureUrl  String?
      leaveTypes   Json?
+     overtimeThreshold Float  @default(2)
   users User[]
 }
 
@@ -476,6 +478,8 @@ model Employee {
   leaves Leave[]
 
   bankChangeRequests BankChangeRequest[]
+
+  overtimes Overtime[]
 }
 
 model Payslip {
@@ -490,6 +494,7 @@ model Payslip {
 
   status      String  @default("pending")
   pdfUrl      String?
+   overtimePay   Float   @default(0)
 
   createdAt   DateTime @default(now())
 
@@ -548,4 +553,21 @@ enum RequestStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+model Overtime {
+  id             String   @id @default(uuid())
+  employeeId     String
+  businessId     String
+
+  overtimeHours  Float
+  date           DateTime
+  
+
+  createdAt      DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, employeeId])
 }

@@ -19,6 +19,7 @@ const employeeRoutes = require("./routes/employeeRoutes");
 const payrollRoutes = require("./routes/payrollRoutes");
 const leaveRoutes = require("./routes/leaveRoutes");
 const bankChangeRoutes = require("./routes/bankChangeRoutes");
+const overtiemeRoutes = require("./routes/overtimeroutes");
 const app = express();
 
 app.use(cors());
@@ -40,7 +41,8 @@ app.use("/api/ledger",customerLedgerRoutes);
 app.use("/api/employees", employeeRoutes);
 app.use("/api/payrolls", payrollRoutes);
 app.use("/api/leaves", leaveRoutes);
-app.use("/api/bankchanges", bankChangeRoutes);   
+app.use("/api/bankchanges", bankChangeRoutes); 
+app.use("/api/overtime", overtiemeRoutes);  
 app.get("/", (req, res) => {
   res.send("QUE Accounting Backend Running...");
 });

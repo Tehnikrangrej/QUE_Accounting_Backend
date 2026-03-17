@@ -5,6 +5,10 @@ const deductions = payslip.deductionList || [];
 const leaveSummary = payslip.leaveSummary || {};
 const unpaidLeaves = payslip.unpaidLeaves || 0;
 
+// 🔥 OVERTIME ADDED
+const overtimePay = payslip.overtimePay || 0;
+const totalOvertimeHours = payslip.totalOvertimeHours || 0;
+
 const totalAllowance = allowances.reduce(
   (sum,a)=>sum + Number(a.amount || 0),0
 );
@@ -13,7 +17,11 @@ const totalDeduction = deductions.reduce(
   (sum,d)=>sum + Number(d.amount || 0),0
 );
 
-const totalEarnings = payslip.basicSalary + totalAllowance;
+// 🔥 UPDATED TOTAL EARNINGS
+const totalEarnings =
+  payslip.basicSalary +
+  totalAllowance +
+  overtimePay;
 
 return `
 <!DOCTYPE html>
@@ -163,6 +171,18 @@ ${allowances.map(a=>`
 <td></td>
 </tr>
 `).join("")}
+
+<!-- 🔥 OVERTIME ROW -->
+${overtimePay > 0 ? `
+<tr>
+<td>
+Overtime ${totalOvertimeHours ? `(${totalOvertimeHours} hrs)` : ""}
+</td>
+<td class="amount">${Number(overtimePay).toLocaleString()}</td>
+<td></td>
+<td></td>
+</tr>
+` : ""}
 
 ${deductions
   .filter(d => Number(d.amount) > 0)

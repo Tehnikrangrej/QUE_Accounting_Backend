@@ -81,6 +81,39 @@ exports.runPayroll = async (req, res) => {
         const grossSalary = basicSalary + totalAllowance;
 
         //////////////////////////////////////////////////////
+        // 🔥 OVERTIME CALCULATION (ADDED)
+        //////////////////////////////////////////////////////
+        const startDate = new Date(year, month - 1, 1);
+        const endDate = new Date(year, month, 0);
+
+        const overtimeData = await prisma.overtime.aggregate({
+          where: {
+            employeeId: emp.id,
+            businessId,
+            date: {
+              gte: startDate,
+              lte: endDate,
+            },
+          },
+          _sum: {
+            overtimeHours: true,
+          },
+        });
+
+        const totalOvertimeHours =
+          overtimeData._sum.overtimeHours || 0;
+
+        const workingDays = settings?.workingDaysPerMonth || 30;
+        const hoursPerDay = settings?.workingHoursPerDay || 8;
+        const multiplier = settings?.overtimeRate || 1.5;
+
+        const hourlyRate =
+          basicSalary / workingDays / hoursPerDay;
+
+        const overtimePay =
+          totalOvertimeHours * hourlyRate * multiplier;
+
+        //////////////////////////////////////////////////////
         // FILTER LEAVES
         //////////////////////////////////////////////////////
         const monthLeaves = emp.leaves.filter(l => {
@@ -103,9 +136,7 @@ exports.runPayroll = async (req, res) => {
         let yearLeaveCount = {};
         let unpaidLeaves = 0;
 
-        // MONTH LEAVES
         monthLeaves.forEach(l => {
-
           const value = l.duration === "HALF" ? 0.5 : 1;
 
           if (!monthLeaveCount[l.leaveCode]) {
@@ -114,16 +145,12 @@ exports.runPayroll = async (req, res) => {
 
           monthLeaveCount[l.leaveCode] += value;
 
-          // LWP always unpaid
           if (l.leaveCode === "LWP") {
             unpaidLeaves += value;
           }
-
         });
 
-        // YEAR LEAVES
         yearLeaves.forEach(l => {
-
           const value = l.duration === "HALF" ? 0.5 : 1;
 
           if (!yearLeaveCount[l.leaveCode]) {
@@ -131,7 +158,6 @@ exports.runPayroll = async (req, res) => {
           }
 
           yearLeaveCount[l.leaveCode] += value;
-
         });
 
         //////////////////////////////////////////////////////
@@ -148,11 +174,8 @@ exports.runPayroll = async (req, res) => {
             type.yearlyLimit !== null &&
             usedYear > type.yearlyLimit
           ) {
-
             const exceeded = usedYear - type.yearlyLimit;
-
             unpaidLeaves += Math.min(exceeded, usedMonth);
-
           }
 
         });
@@ -161,14 +184,14 @@ exports.runPayroll = async (req, res) => {
         // LEAVE DEDUCTION
         //////////////////////////////////////////////////////
         const dailySalary = grossSalary / 30;
-
         const leaveDeduction = unpaidLeaves * dailySalary;
 
         //////////////////////////////////////////////////////
-        // FINAL SALARY
+        // FINAL SALARY (UPDATED WITH OVERTIME)
         //////////////////////////////////////////////////////
         const netSalary =
-          grossSalary -
+          grossSalary +
+          overtimePay - // 🔥 ADDED
           totalDeduction -
           leaveDeduction;
 
@@ -183,6 +206,7 @@ exports.runPayroll = async (req, res) => {
             basicSalary,
             allowance: totalAllowance,
             deduction: totalDeduction + leaveDeduction,
+            overtimePay, // 🔥 ADDED
             netSalary,
             status: "pending"
           }
@@ -206,7 +230,10 @@ exports.runPayroll = async (req, res) => {
             leaveSummary: monthLeaveCount,
             unpaidLeaves,
             month,
-            year
+            year,
+
+            overtimePay,          // 🔥 ADDED
+            totalOvertimeHours    // 🔥 ADDED
           },
           settings
         );
