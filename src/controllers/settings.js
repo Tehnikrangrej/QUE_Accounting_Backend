@@ -34,6 +34,39 @@ exports.saveSettings = async (req, res) => {
     const data = { ...req.body };
 
     //////////////////////////////////////////////////////
+    // 🔥 CURRENCY VALIDATION (NEW)
+    //////////////////////////////////////////////////////
+    const allowedCurrencies = ["INR", "USD", "AED", "EUR"];
+
+    if (data.currency && !allowedCurrencies.includes(data.currency)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid currency"
+      });
+    }
+
+    const currencyMap = {
+      INR: "₹",
+      USD: "$",
+      AED: "د.إ",
+      EUR: "€"
+    };
+
+    // Auto assign symbol if not provided
+    if (data.currency && !data.currencySymbol) {
+      data.currencySymbol = currencyMap[data.currency] || "₹";
+    }
+
+    // Default values if nothing sent
+    if (!data.currency) {
+      data.currency = "INR";
+    }
+
+    if (!data.currencySymbol) {
+      data.currencySymbol = currencyMap[data.currency] || "₹";
+    }
+
+    //////////////////////////////////////////////////////
     // LOGO UPLOAD
     //////////////////////////////////////////////////////
     if (req.files?.companyLogo) {
@@ -47,31 +80,30 @@ exports.saveSettings = async (req, res) => {
       data.signatureUrl = req.files.signature[0].path;
     }
 
-   //////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////
 // HANDLE LEAVE TYPES
 //////////////////////////////////////////////////////
 
-let leaveTypes = data.leaveTypes || [];
+    let leaveTypes = data.leaveTypes || [];
 
-// if frontend sends JSON string
-if (typeof leaveTypes === "string") {
-  leaveTypes = JSON.parse(leaveTypes);
-}
+    if (typeof leaveTypes === "string") {
+      leaveTypes = JSON.parse(leaveTypes);
+    }
 
-// remove any existing LWP to prevent duplicates
-leaveTypes = leaveTypes.filter(l => l.code !== "LWP");
+    // remove existing LWP
+    leaveTypes = leaveTypes.filter(l => l.code !== "LWP");
 
-// add protected LWP
-leaveTypes.push({
-  code: "LWP",
-  name: "Unpaid Leave",
-  yearlyLimit: null,
-  system: true
-});
+    // add protected LWP
+    leaveTypes.push({
+      code: "LWP",
+      name: "Unpaid Leave",
+      yearlyLimit: null,
+      system: true
+    });
 
-data.leaveTypes = leaveTypes;
+    data.leaveTypes = leaveTypes;
 
-    // Ensure LWP always exists
+    // Ensure LWP exists
     const lwpExists = leaveTypes.some(l => l.code === "LWP");
 
     if (!lwpExists) {
@@ -83,7 +115,7 @@ data.leaveTypes = leaveTypes;
       });
     }
 
-    // Prevent deletion of LWP
+    // Prevent deletion
     leaveTypes = leaveTypes.map(l => {
       if (l.code === "LWP") {
         return {

@@ -9,6 +9,9 @@ const unpaidLeaves = payslip.unpaidLeaves || 0;
 const overtimePay = payslip.overtimePay || 0;
 const totalOvertimeHours = payslip.totalOvertimeHours || 0;
 
+// 🔥 CURRENCY (NEW)
+const symbol = settings?.currencySymbol || "₹";
+
 const totalAllowance = allowances.reduce(
   (sum,a)=>sum + Number(a.amount || 0),0
 );
@@ -23,7 +26,7 @@ const totalEarnings =
   totalAllowance +
   overtimePay;
 
-const finalTotalDeduction = totalDeduction; // ✅ FIXED
+const finalTotalDeduction = totalDeduction;
 
 return `
 <!DOCTYPE html>
@@ -153,14 +156,14 @@ ${settings?.companyLogo
 
 <tr>
 <th>Earnings</th>
-<th>Amount (Rs)</th>
+<th>Amount (${symbol})</th>
 <th>Deductions</th>
-<th>Amount (Rs)</th>
+<th>Amount (${symbol})</th>
 </tr>
 
 <tr>
 <td>Basic Pay</td>
-<td class="amount">${Number(payslip.basicSalary).toLocaleString()}</td>
+<td class="amount">${symbol} ${Number(payslip.basicSalary).toLocaleString()}</td>
 <td></td>
 <td></td>
 </tr>
@@ -168,7 +171,7 @@ ${settings?.companyLogo
 ${allowances.map(a=>`
 <tr>
 <td>${a.name}</td>
-<td class="amount">${Number(a.amount).toLocaleString()}</td>
+<td class="amount">${symbol} ${Number(a.amount).toLocaleString()}</td>
 <td></td>
 <td></td>
 </tr>
@@ -180,13 +183,13 @@ ${overtimePay > 0 ? `
 <td>
 Overtime ${totalOvertimeHours ? `(${totalOvertimeHours} hrs)` : ""}
 </td>
-<td class="amount">${Number(overtimePay).toLocaleString()}</td>
+<td class="amount">${symbol} ${Number(overtimePay).toLocaleString()}</td>
 <td></td>
 <td></td>
 </tr>
 ` : ""}
 
-<!-- 🔥 DEDUCTIONS (INCLUDING LOAN EMI FROM CONTROLLER) -->
+<!-- 🔥 DEDUCTIONS -->
 ${deductions
   .filter(d => Number(d.amount) > 0)
   .map(d=>`
@@ -194,20 +197,20 @@ ${deductions
 <td></td>
 <td></td>
 <td>${d.name}</td>
-<td class="amount">${Number(d.amount).toLocaleString()}</td>
+<td class="amount">${symbol} ${Number(d.amount).toLocaleString()}</td>
 </tr>
 `).join("")}
 
 <tr class="total">
 <td>Total Earnings</td>
-<td class="amount">${Number(totalEarnings).toLocaleString()}</td>
+<td class="amount">${symbol} ${Number(totalEarnings).toLocaleString()}</td>
 <td>Total Deductions</td>
-<td class="amount">${Number(finalTotalDeduction).toLocaleString()}</td>
+<td class="amount">${symbol} ${Number(finalTotalDeduction).toLocaleString()}</td>
 </tr>
 
 <tr class="total">
 <td colspan="3">Net Pay</td>
-<td class="amount">${Number(payslip.netSalary).toLocaleString()}</td>
+<td class="amount">${symbol} ${Number(payslip.netSalary).toLocaleString()}</td>
 </tr>
 
 </table>
@@ -241,7 +244,7 @@ ${unpaidLeaves > 0 ? `
 
 <div class="footer">
 
-<strong>Rs ${Number(payslip.netSalary).toLocaleString()}</strong><br>
+<strong>${symbol} ${Number(payslip.netSalary).toLocaleString()}</strong><br>
 Rupees ${Number(payslip.netSalary).toLocaleString()} Only
 
 <br><br>

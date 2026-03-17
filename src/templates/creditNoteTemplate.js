@@ -1,7 +1,12 @@
-module.exports = (credit) => {
+module.exports = (credit, settings) => {
 
   const customer = credit.customer;
   const overpaid = Number(credit.amount || 0);
+
+  //////////////////////////////////////////////////////
+  // 🔥 CURRENCY (NEW)
+  //////////////////////////////////////////////////////
+  const symbol = settings?.currencySymbol || "₹";
 
   // 5% weight deduction
   const weight = overpaid * 0.05;
@@ -19,8 +24,8 @@ module.exports = (credit) => {
         <td>1</td>
         <td></td>
         <td>1</td>
-        <td>${overpaid.toFixed(2)}</td>
-        <td>${overpaid.toFixed(2)}</td>
+        <td>${symbol} ${overpaid.toFixed(2)}</td>
+        <td>${symbol} ${overpaid.toFixed(2)}</td>
       </tr>
   `;
 
@@ -55,8 +60,8 @@ ${customer?.companyName || ""}
 <th>#</th>
 <th>Item</th>
 <th>Qty</th>
-<th>Rate</th>
-<th>Amount</th>
+<th>Rate (${symbol})</th>
+<th>Amount (${symbol})</th>
 </tr>
 </thead>
 
@@ -66,10 +71,10 @@ ${rows}
 </table>
 
 <div class="totals">
-<div>Total Overpaid: ${overpaid.toFixed(2)}</div>
-<div>Weight (5%): ${weight.toFixed(2)}</div>
-<div><b>Sub Total: ${subTotal.toFixed(2)}</b></div>
-<div>Credits Remaining: ${subTotal.toFixed(2)}</div>
+<div>Total Overpaid: ${symbol} ${overpaid.toFixed(2)}</div>
+<div>Weight (5%): ${symbol} ${weight.toFixed(2)}</div>
+<div><b>Sub Total: ${symbol} ${subTotal.toFixed(2)}</b></div>
+<div>Credits Remaining: ${symbol} ${subTotal.toFixed(2)}</div>
 </div>
 
 <br/><br/>

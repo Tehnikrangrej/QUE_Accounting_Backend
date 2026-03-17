@@ -366,6 +366,8 @@ model Settings {
   invoiceFormat String @default("INV-YYYY-MM-DD-COUNT")
    signatureUrl  String?
      leaveTypes   Json?
+     currency        String  @default("INR")  
+  currencySymbol  String  @default("₹")     
      overtimeThreshold Float  @default(2)
   users User[]
 }

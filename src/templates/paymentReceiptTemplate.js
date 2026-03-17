@@ -1,4 +1,9 @@
-module.exports = (payment, invoice) => {
+module.exports = (payment, invoice, settings) => {
+
+  //////////////////////////////////////////////////////
+  // 🔥 CURRENCY (NEW)
+  //////////////////////////////////////////////////////
+  const symbol = settings?.currencySymbol || "$";
 
   //////////////////////////////////////////////////////
   // CALCULATIONS
@@ -132,7 +137,7 @@ module.exports = (payment, invoice) => {
     <!-- TOTAL PAID BOX -->
     <div class="green-box">
       <div>Total Paid</div>
-      <h3>$${Number(payment.amount).toFixed(2)}</h3>
+      <h3>${symbol} ${Number(payment.amount).toFixed(2)}</h3>
     </div>
 
     <h3>Payment Details</h3>
@@ -142,8 +147,8 @@ module.exports = (payment, invoice) => {
         <tr>
           <th>Invoice Number</th>
           <th>Invoice Date</th>
-          <th>Invoice Amount</th>
-          <th>Payment Amount</th>
+          <th>Invoice Amount (${symbol})</th>
+          <th>Payment Amount (${symbol})</th>
           <th>${label}</th>
         </tr>
       </thead>
@@ -152,13 +157,13 @@ module.exports = (payment, invoice) => {
         <tr>
           <td>${invoice.invoiceNumber}</td>
           <td>${invoiceDate}</td>
-          <td>$${Number(invoice.grandTotal).toFixed(2)}</td>
-          <td>$${Number(payment.amount).toFixed(2)}</td>
+          <td>${symbol} ${Number(invoice.grandTotal).toFixed(2)}</td>
+          <td>${symbol} ${Number(payment.amount).toFixed(2)}</td>
           <td class="${cssClass}">
             ${
               label === "Settled"
                 ? "Settled"
-                : `$${displayAmount.toFixed(2)}`
+                : `${symbol} ${displayAmount.toFixed(2)}`
             }
           </td>
         </tr>
