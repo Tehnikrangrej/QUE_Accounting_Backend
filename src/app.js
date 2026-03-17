@@ -21,6 +21,8 @@ const leaveRoutes = require("./routes/leaveRoutes");
 const bankChangeRoutes = require("./routes/bankChangeRoutes");
 const overtiemeRoutes = require("./routes/overtimeroutes");
 const loanRoutes = require("./routes/loanroutes");
+const expenseRoutes = require("./routes/expenseRoutes");
+const vendorRoutes = require("./routes/vendorRoutes");
 const app = express();
 
 app.use(cors());
@@ -45,6 +47,8 @@ app.use("/api/leaves", leaveRoutes);
 app.use("/api/bankchanges", bankChangeRoutes); 
 app.use("/api/overtime", overtiemeRoutes); 
 app.use("/api/loans", loanRoutes); 
+app.use("/api/expenses", expenseRoutes);
+app.use("/api/vendors", vendorRoutes);
 app.get("/", (req, res) => {
   res.send("QUE Accounting Backend Running...");
 });

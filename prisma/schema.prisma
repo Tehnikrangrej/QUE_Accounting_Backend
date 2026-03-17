@@ -69,6 +69,7 @@
     creditNotes CreditNote[]
     employees Employee[]
     overtimes Overtime[]
+    expenses Expense[]
 }
 
   //////////////////////////////////////////////////////
@@ -590,4 +591,37 @@ model Loan {
   createdAt       DateTime @default(now())
 
   employee Employee @relation(fields: [employeeId], references: [id])
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  businessId  String
+
+  title       String
+  amount      Float
+  category    String   // Rent, Electricity, Office, etc.
+  paymentMethod String // Cash, Bank, UPI
+
+  date        DateTime
+  notes       String?
+
+  vendorId    String?
+
+  createdAt   DateTime @default(now())
+
+  vendor Vendor? @relation(fields: [vendorId], references: [id])
+  business Business @relation(fields: [businessId], references: [id])
+}
+
+model Vendor {
+  id         String   @id @default(uuid())
+  businessId String
+
+  name       String
+  email      String?
+  phone      String?
+
+  createdAt  DateTime @default(now())
+
+  expenses   Expense[]
 }
