@@ -70,6 +70,7 @@
     employees Employee[]
     overtimes Overtime[]
     expenses Expense[]
+    customerContacts CustomerContact[]
 }
 
   //////////////////////////////////////////////////////
@@ -240,6 +241,7 @@ model Customer {
   @@index([businessId])
   @@map("customers")
   creditNotes CreditNote[]
+  customerContacts CustomerContact[]
 }
 
   //////////////////////////////////////////////////////
@@ -626,4 +628,36 @@ model Vendor {
   createdAt  DateTime @default(now())
 
   expenses   Expense[]
+}
+
+model CustomerContact {
+  id          String   @id @default(uuid())
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+  customerId  String
+  businessId  String
+
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  //////////////////////////////////////////////////////
+  // FIELDS (FROM YOUR UI)
+  //////////////////////////////////////////////////////
+  fullName    String
+  email       String?
+  position    String?
+  phone       String?
+
+  isActive    Boolean  @default(true)
+
+  //////////////////////////////////////////////////////
+  // META
+  //////////////////////////////////////////////////////
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([businessId])
 }

@@ -24,6 +24,7 @@ const loanRoutes = require("./routes/loanroutes");
 const expenseRoutes = require("./routes/expenseRoutes");
 const vendorRoutes = require("./routes/vendorRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
+const contact = require("./routes/customerContactRoutes");
 const app = express();
 
 app.use(cors());
@@ -51,6 +52,7 @@ app.use("/api/loans", loanRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/vendors", vendorRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/contacts", contact);
 app.get("/", (req, res) => {
   res.send("QUE Accounting Backend Running...");
 });
