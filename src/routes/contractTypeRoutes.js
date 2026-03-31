@@ -5,55 +5,42 @@ const businessMiddleware = require("../middlewares/business.middleware");
 const checkPermission = require("../middlewares/checkPermission");
 
 const {
-  createContact,
-  getContacts,
-  updateContact,
-  deleteContact
-} = require("../controllers/customerContactController");
+  createContractType,
+  getContractTypes,
+  deleteContractType
+} = require("../controllers/contractTypeController");
 
 //////////////////////////////////////////////////////
-// CREATE CONTACT
+// CREATE TYPE
 //////////////////////////////////////////////////////
 router.post(
   "/",
   authMiddleware,
   businessMiddleware,
-  checkPermission("customer_contact", "create"),
-  createContact
+  checkPermission("contract_type", "create"),
+  createContractType
 );
 
 //////////////////////////////////////////////////////
-// GET ALL CONTACTS (BY CUSTOMER)
+// GET TYPES
 //////////////////////////////////////////////////////
 router.get(
   "/",
   authMiddleware,
   businessMiddleware,
-  getContacts
-);
-
-
-
-//////////////////////////////////////////////////////
-// UPDATE CONTACT
-//////////////////////////////////////////////////////
-router.put(
-  "/:id",
-  authMiddleware,
-  businessMiddleware,
-  checkPermission("customer_contact", "update"),
-  updateContact
+  checkPermission("contract_type", "read"),
+  getContractTypes
 );
 
 //////////////////////////////////////////////////////
-// DELETE CONTACT
+// DELETE TYPE
 //////////////////////////////////////////////////////
 router.delete(
   "/:id",
   authMiddleware,
   businessMiddleware,
-  checkPermission("customer_contact", "delete"),
-  deleteContact
+  checkPermission("contract_type", "delete"),
+  deleteContractType
 );
 
 module.exports = router;

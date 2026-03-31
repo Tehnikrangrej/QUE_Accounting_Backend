@@ -71,6 +71,8 @@
     overtimes Overtime[]
     expenses Expense[]
     customerContacts CustomerContact[]
+    contracts Contract[]
+    contractTypes ContractType[]
 }
 
   //////////////////////////////////////////////////////
@@ -242,6 +244,7 @@ model Customer {
   @@map("customers")
   creditNotes CreditNote[]
   customerContacts CustomerContact[]
+  contracts Contract[]
 }
 
   //////////////////////////////////////////////////////
@@ -660,4 +663,54 @@ model CustomerContact {
 
   @@index([customerId])
   @@index([businessId])
+}
+
+model Contract {
+  id          String   @id @default(uuid())
+
+  businessId  String
+  customerId  String
+  typeId      String?   // 👈 instead of type string
+
+  business    Business @relation(fields: [businessId], references: [id])
+  customer    Customer @relation(fields: [customerId], references: [id])
+  type        ContractType? @relation(fields: [typeId], references: [id])
+
+  title       String
+  description String?
+
+  value       Float
+  currency    String 
+
+  startDate   DateTime
+  endDate     DateTime?
+
+  isDeleted   Boolean  @default(false)
+  isHidden    Boolean  @default(false)
+
+  status      ContractStatus @default(ACTIVE)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([customerId])
+}
+enum ContractStatus {
+  ACTIVE
+  INACTIVE
+  COMPLETED
+  TERMINATED
+}
+model ContractType {
+  id         String   @id @default(uuid())
+  name       String
+  businessId String
+
+  business   Business @relation(fields: [businessId], references: [id])
+  contracts  Contract[]
+
+  createdAt  DateTime @default(now())
+
+  @@unique([businessId, name]) // prevent duplicate types per business
 }
