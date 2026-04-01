@@ -34,38 +34,37 @@ exports.createPayment = async (req, res) => {
       },
     });
 
-    if (!invoice)
+    if (!invoice) {
       return errorResponse(res, "Invoice not found", 404);
+    }
 
     ////////////////////////////////////////////////////
-    // CALCULATE PREVIOUS PAYMENTS
+    // CALCULATIONS
     ////////////////////////////////////////////////////
     const previousPaid = invoice.payments.reduce(
-      (sum, p) => sum + Number(p.amount),
+      (sum, p) => sum + Number(p.amount || 0),
       0
     );
 
     const remaining =
-      Number(invoice.grandTotal) - previousPaid;
+      Number(invoice.grandTotal || 0) - previousPaid;
 
-   ////////////////////////////////////////////////////
-// 🔢 GENERATE PAYMENT NUMBER (PER BUSINESS)
-////////////////////////////////////////////////////
-const lastPayment = await prisma.payment.findFirst({
-  where: { businessId },
-  orderBy: { paymentNumber: "desc" },
-  select: { paymentNumber: true },
-});
+    ////////////////////////////////////////////////////
+    // PAYMENT NUMBER
+    ////////////////////////////////////////////////////
+    const lastPayment = await prisma.payment.findFirst({
+      where: { businessId },
+      orderBy: { paymentNumber: "desc" },
+      select: { paymentNumber: true },
+    });
 
-let paymentNumber = "P-001";
+    let paymentNumber = "P-001";
 
-if (lastPayment && lastPayment.paymentNumber) {
-  const lastNumber = parseInt(lastPayment.paymentNumber.split("-")[1]);
+    if (lastPayment?.paymentNumber) {
+      const lastNumber = parseInt(lastPayment.paymentNumber.split("-")[1]);
+      paymentNumber = `P-${String(lastNumber + 1).padStart(3, "0")}`;
+    }
 
-  const newNumber = lastNumber + 1;
-
-  paymentNumber = `P-${String(newNumber).padStart(3, "0")}`;
-}
     ////////////////////////////////////////////////////
     // CREATE PAYMENT
     ////////////////////////////////////////////////////
@@ -74,7 +73,7 @@ if (lastPayment && lastPayment.paymentNumber) {
         paymentNumber,
         invoiceId,
         businessId,
-        amount: Number(amount),
+        amount: Number(amount || 0),
         paymentDate: new Date(paymentDate),
         paymentMode,
         transactionId,
@@ -84,28 +83,25 @@ if (lastPayment && lastPayment.paymentNumber) {
     });
 
     ////////////////////////////////////////////////////
-    // CREDIT NOTE (OVERPAYMENT)
+    // CREDIT NOTE
     ////////////////////////////////////////////////////
     let creditNote = null;
 
     if (Number(amount) > remaining) {
-      const extraAmount = Number(amount) - remaining;
-
       creditNote = await createCreditNote({
         invoice,
         businessId,
-        extraAmount,
+        extraAmount: Number(amount) - remaining,
       });
     }
 
     ////////////////////////////////////////////////////
-    // UPDATE INVOICE STATUS
+    // UPDATE STATUS
     ////////////////////////////////////////////////////
-    const totalPaid = previousPaid + Number(amount);
+    const totalPaid = previousPaid + Number(amount || 0);
 
     let status = "UNPAID";
-
-    if (totalPaid < invoice.grandTotal)
+    if (totalPaid < Number(invoice.grandTotal || 0))
       status = "PARTIALLY_PAID";
     else status = "PAID";
 
@@ -115,23 +111,28 @@ if (lastPayment && lastPayment.paymentNumber) {
     });
 
     ////////////////////////////////////////////////////
-    // REFRESH INVOICE
+    // REFRESH INVOICE (🔥 FIXED)
     ////////////////////////////////////////////////////
-    const updatedInvoice =
-      await prisma.invoice.findUnique({
-        where: { id: invoiceId },
-        include: {
-          customer: true,
-          payments: true,
-        },
-      });
+    const updatedInvoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: {
+        id: true,
+        invoiceNumber: true,
+        invoiceDate: true,
+        grandTotal: true, // ✅ IMPORTANT
+        customer: true,
+        payments: true,
+      },
+    });
 
     ////////////////////////////////////////////////////
-    // GENERATE PAYMENT PDF
+    // GENERATE PDF (🔥 FIXED + DEBUG)
     ////////////////////////////////////////////////////
     let finalPayment = payment;
 
     try {
+      console.log("👉 Generating PDF...");
+
       const settings = await prisma.settings.findUnique({
         where: { businessId },
       });
@@ -142,10 +143,11 @@ if (lastPayment && lastPayment.paymentNumber) {
         settings
       );
 
-      const pdfUrl = await uploadPaymentPdf(
-        pdfBuffer,
-        payment.id
-      );
+      console.log("✅ PDF Generated");
+
+      const pdfUrl = await uploadPaymentPdf(pdfBuffer, payment.id);
+
+      console.log("✅ Uploaded:", pdfUrl);
 
       finalPayment = await prisma.payment.update({
         where: { id: payment.id },
@@ -153,7 +155,12 @@ if (lastPayment && lastPayment.paymentNumber) {
       });
 
     } catch (err) {
-      console.error("PDF ERROR:", err);
+      console.error("🔥 PDF ERROR:", err);
+      return res.status(500).json({
+        success: false,
+        message: "PDF generation failed",
+        error: err.message,
+      });
     }
 
     ////////////////////////////////////////////////////
