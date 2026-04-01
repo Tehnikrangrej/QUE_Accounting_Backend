@@ -73,6 +73,7 @@
     customerContacts CustomerContact[]
     contracts Contract[]
     contractTypes ContractType[]
+    leads Lead[]
 }
 
   //////////////////////////////////////////////////////
@@ -239,6 +240,8 @@ model Customer {
   // RELATIONS
   //////////////////////////////////////////////////////
   invoices        Invoice[]
+  leadId   String? @unique
+  leads           Lead[]
 
   @@index([businessId])
   @@map("customers")
@@ -713,4 +716,111 @@ model ContractType {
   createdAt  DateTime @default(now())
 
   @@unique([businessId, name]) // prevent duplicate types per business
+}
+
+model Lead {
+  id              String   @id @default(uuid())
+  businessId      String
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name            String
+  position        String?
+  email           String?
+  phone           String?
+
+  company         String?
+  website         String?
+
+  city            String?
+  state           String?
+  country         String?
+  zipCode         String?
+
+  status          LeadStatus   @default(NEW)
+  source          LeadSource
+
+  assignedTo      String?
+  tags            String[]
+  leadValue       Float?
+
+  description     String?
+  isPublic        Boolean  @default(false)
+  contactedToday  Boolean  @default(false)
+  defaultLanguage String?
+
+  stageId         String?
+  stage           PipelineStage? @relation(fields: [stageId], references: [id])
+
+  activities      LeadActivity[]
+  notes           LeadNote[]
+  tasks           LeadTask[]
+  reminders       LeadReminder[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  customers Customer[]
+}
+
+model PipelineStage {
+  id     String @id @default(uuid())
+  name   String
+  order  Int
+  color  String?
+
+  leads  Lead[]
+}
+
+
+model LeadActivity {
+  id        String   @id @default(uuid())
+  leadId    String
+  message   String
+  createdAt DateTime @default(now())
+
+  lead      Lead @relation(fields: [leadId], references: [id])
+}
+
+model LeadNote {
+  id        String   @id @default(uuid())
+  leadId    String
+  note      String
+  createdAt DateTime @default(now())
+
+  lead      Lead @relation(fields: [leadId], references: [id])
+}
+
+model LeadTask {
+  id        String   @id @default(uuid())
+  leadId    String
+  title     String
+  status    String
+  createdAt DateTime @default(now())
+
+  lead      Lead @relation(fields: [leadId], references: [id])
+}
+
+model LeadReminder {
+  id        String   @id @default(uuid())
+  leadId    String
+  title     String
+  date      DateTime
+
+  lead      Lead @relation(fields: [leadId], references: [id])
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  LOST
+  CONVERTED
+}
+
+enum LeadSource {
+  WEBSITE
+  SOCIAL_MEDIA
+  LINKEDIN
+  REFERRAL
+  CALL
+  OTHER
 }
