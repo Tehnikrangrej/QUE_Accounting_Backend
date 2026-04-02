@@ -6,9 +6,9 @@
   "type": "commonjs",
   "scripts": {
     "dev": "nodemon --trace-warnings server.js",
+    "postinstall": "prisma generate",
     "start": "node --trace-warnings server.js",
     "prisma:generate": "prisma generate",
-    "postinstall": "prisma generate",
     "engines": {
       "node": ">=18.0.0"
     }
@@ -32,7 +32,7 @@
     "pdfkit": "^0.17.2",
     "pg": "^8.17.2",
     "prisma": "^7.3.0",
-    "puppeteer": "^19.11.1",
+    "puppeteer": "^22.15.0",
     "puppeteer-core": "^10.4.0",
     "streamifier": "^0.1.1"
   },
