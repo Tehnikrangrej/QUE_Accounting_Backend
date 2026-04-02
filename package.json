@@ -6,6 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "nodemon --trace-warnings server.js",
+    "postinstall": "npx puppeteer browsers install chrome",
     "start": "node --trace-warnings server.js",
     "prisma:generate": "prisma generate",
     "engines": {
