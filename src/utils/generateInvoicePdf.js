@@ -1,15 +1,13 @@
-const puppeteer = require("puppeteer");
+const chromium = require("chrome-aws-lambda");
+const puppeteer = require("puppeteer-core");
 const invoiceTemplate = require("../templates/invoiceTemplate");
 
 module.exports = async (invoice, settings) => {
 
   const browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage"
-    ]
+    args: chromium.args,
+    executablePath: await chromium.executablePath,
+    headless: chromium.headless,
   });
 
   const page = await browser.newPage();
