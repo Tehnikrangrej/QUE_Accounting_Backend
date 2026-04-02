@@ -128,7 +128,8 @@ exports.createInvoice = async (req, res) => {
       });
 
     } catch (pdfError) {
-      console.error("PDF generation failed:", pdfError);
+     console.error("PDF ERROR FULL:", pdfError);
+console.error("STACK:", pdfError?.stack);
     }
 
     //////////////////////////////////////////////////////
