@@ -6,7 +6,6 @@
   "type": "commonjs",
   "scripts": {
     "dev": "nodemon --trace-warnings server.js",
-    "postinstall": "prisma generate",
     "start": "node --trace-warnings server.js",
     "prisma:generate": "prisma generate",
     "engines": {
