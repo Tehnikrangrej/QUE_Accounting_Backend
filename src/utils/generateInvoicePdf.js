@@ -1,12 +1,21 @@
-const puppeteer = require("puppeteer");
+const puppeteer = require("puppeteer-core");
 const invoiceTemplate = require("../templates/invoiceTemplate");
 
 module.exports = async (invoice, settings) => {
   let browser;
 
   try {
+    const executablePath =
+      process.env.CHROME_EXECUTABLE_PATH ||
+      (process.platform === "win32"
+        ? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+        : "/usr/bin/google-chrome-stable");
+
+    console.log("🔍 Using Chrome at:", executablePath);
+
     browser = await puppeteer.launch({
       headless: true,
+      executablePath,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
