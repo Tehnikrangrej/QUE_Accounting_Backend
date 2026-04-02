@@ -7,31 +7,20 @@ module.exports = async (invoice, settings) => {
   try {
     browser = await puppeteer.launch({
       headless: true,
-      ignoreHTTPSErrors: true,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
         "--disable-gpu",
-        "--disable-extensions",
       ],
     });
 
     const page = await browser.newPage();
-
     await page.setViewport({ width: 1200, height: 800 });
 
     const html = invoiceTemplate(invoice, settings);
-
     await page.setContent(html, { waitUntil: "domcontentloaded" });
-
-    // ✅ Wait for page to fully render
     await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // ✅ Check page is still open before generating PDF
-    if (page.isClosed()) {
-      throw new Error("Page was closed before PDF generation");
-    }
 
     const pdfBuffer = await page.pdf({
       format: "A4",
@@ -39,7 +28,6 @@ module.exports = async (invoice, settings) => {
     });
 
     console.log("✅ PDF Buffer size:", pdfBuffer?.length, "bytes");
-
     return pdfBuffer;
 
   } catch (err) {
