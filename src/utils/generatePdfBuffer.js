@@ -1,14 +1,11 @@
-const chromium = require("chrome-aws-lambda");
 const puppeteer = require("puppeteer-core");
-
+  
 module.exports=async(html)=>{
 
   const browser=await puppeteer.launch({
-    args: chromium.args,
-    executablePath: await chromium.executablePath,
-    headless: chromium.headless,
+    headless:true,
+    args:["--no-sandbox","--disable-setuid-sandbox"]
   });
-
 
   const page=await browser.newPage();
 
