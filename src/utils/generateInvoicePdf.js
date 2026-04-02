@@ -1,14 +1,17 @@
 const chromium = require("chrome-aws-lambda");
 const puppeteer = require("puppeteer-core");
-const invoiceTemplate = require("../templates/invoiceTemplate");
 
 module.exports = async (invoice, settings) => {
 
   const executablePath = await chromium.executablePath;
 
+  if (!executablePath) {
+    throw new Error("Chromium not found in environment");
+  }
+
   const browser = await puppeteer.launch({
     args: chromium.args,
-    executablePath: executablePath || "/usr/bin/chromium",
+    executablePath: executablePath,
     headless: true,
   });
 
