@@ -1,34 +1,52 @@
-const chromium = require("chrome-aws-lambda");
-const puppeteer = require("puppeteer-core");
+const puppeteer = require("puppeteer");
+const invoiceTemplate = require("../templates/invoiceTemplate");
 
 module.exports = async (invoice, settings) => {
+  let browser;
 
-  const executablePath = await chromium.executablePath;
+  try {
+    browser = await puppeteer.launch({
+      headless: true,
+      ignoreHTTPSErrors: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--disable-extensions",
+      ],
+    });
 
-  if (!executablePath) {
-    throw new Error("Chromium not found in environment");
+    const page = await browser.newPage();
+
+    await page.setViewport({ width: 1200, height: 800 });
+
+    const html = invoiceTemplate(invoice, settings);
+
+    await page.setContent(html, { waitUntil: "domcontentloaded" });
+
+    // ✅ Wait for page to fully render
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // ✅ Check page is still open before generating PDF
+    if (page.isClosed()) {
+      throw new Error("Page was closed before PDF generation");
+    }
+
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+    });
+
+    console.log("✅ PDF Buffer size:", pdfBuffer?.length, "bytes");
+
+    return pdfBuffer;
+
+  } catch (err) {
+    console.error("❌ PDF generation error:", err.message);
+    return null;
+
+  } finally {
+    if (browser) await browser.close();
   }
-
-  const browser = await puppeteer.launch({
-    args: chromium.args,
-    executablePath: executablePath,
-    headless: true,
-  });
-
-  const page = await browser.newPage();
-
-  const html = invoiceTemplate(invoice, settings);
-
-  await page.setContent(html, {
-    waitUntil: "networkidle0"
-  });
-
-  const pdfBuffer = await page.pdf({
-    format: "A4",
-    printBackground: true
-  });
-
-  await browser.close();
-
-  return pdfBuffer;
 };

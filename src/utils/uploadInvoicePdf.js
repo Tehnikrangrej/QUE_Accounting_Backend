@@ -1,6 +1,9 @@
 const cloudinary = require("../config/cloudinary");
 
 module.exports = async (pdfBuffer, invoiceNumber) => {
+    if (!pdfBuffer || pdfBuffer.length === 0) {
+    throw new Error("PDF buffer is empty or null — cannot upload");
+  }
   return new Promise((resolve, reject) => {
 
     const stream = cloudinary.uploader.upload_stream(
