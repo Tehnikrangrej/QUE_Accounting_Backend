@@ -11,6 +11,9 @@
     "prisma:generate": "prisma generate",
     "engines": {
       "node": ">=18.0.0"
+    },
+    "puppeteer": {
+      "cacheDirectory": "/opt/render/.cache/puppeteer"
     }
   },
   "keywords": [],
@@ -35,6 +38,7 @@
     "streamifier": "^0.1.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.11"
+    "nodemon": "^3.1.11",
+    "puppeteer": "^22.15.0"
   }
 }
