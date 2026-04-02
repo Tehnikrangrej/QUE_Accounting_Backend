@@ -4,10 +4,12 @@ const invoiceTemplate = require("../templates/invoiceTemplate");
 
 module.exports = async (invoice, settings) => {
 
+  const executablePath = await chromium.executablePath;
+
   const browser = await puppeteer.launch({
     args: chromium.args,
-    executablePath: await chromium.executablePath,
-    headless: chromium.headless,
+    executablePath: executablePath || "/usr/bin/chromium",
+    headless: true,
   });
 
   const page = await browser.newPage();
