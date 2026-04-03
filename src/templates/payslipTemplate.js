@@ -1,5 +1,16 @@
 module.exports = (payslip, settings) => {
 
+  const getCurrencyName = (symbol) => {
+  const map = {
+    "₹": "Rupees",
+    "$": "Dollars",
+    "د.إ": "Dirhams",
+    "€": "Euros",
+    "£": "Pounds",
+  };
+  return map[symbol] || "Amount";
+};
+
 const allowances = payslip.allowanceList || [];
 const deductions = payslip.deductionList || [];
 const leaveSummary = payslip.leaveSummary || {};
@@ -245,7 +256,7 @@ ${unpaidLeaves > 0 ? `
 <div class="footer">
 
 <strong>${symbol} ${Number(payslip.netSalary).toLocaleString()}</strong><br>
-Rupees ${Number(payslip.netSalary).toLocaleString()} Only
+${getCurrencyName(symbol)} ${Number(payslip.netSalary).toLocaleString()} Only
 
 <br><br>
 
