@@ -1,22 +1,36 @@
 const puppeteer = require("puppeteer-core");
-  
-module.exports=async(html)=>{
+const chromium = require("@sparticuz/chromium");
 
-  const browser=await puppeteer.launch({
-    headless:true,
-    args:["--no-sandbox","--disable-setuid-sandbox"]
-  });
+module.exports = async (html) => {
+  let browser;
+  try {
+    const execPath = process.env.NODE_ENV !== "production"
+      ? (process.platform === "win32"
+          ? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+          : "/usr/bin/google-chrome")
+      : await chromium.executablePath();
 
-  const page=await browser.newPage();
+    browser = await puppeteer.launch({
+      headless: chromium.headless,
+      executablePath: execPath,
+      args: chromium.args,
+    });
 
-  await page.setContent(html,{waitUntil:"networkidle0"});
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
 
-  const buffer=await page.pdf({
-    format:"A4",
-    printBackground:true
-  });
+    const buffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+    });
 
-  await browser.close();
+    console.log("✅ Ledger PDF size:", buffer?.length, "bytes");
+    return buffer;
 
-  return buffer;
+  } catch (err) {
+    console.error("❌ Ledger PDF error:", err.message);
+    throw err;
+  } finally {
+    if (browser) await browser.close();
+  }
 };
