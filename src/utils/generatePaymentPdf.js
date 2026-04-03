@@ -1,32 +1,34 @@
 const puppeteer = require("puppeteer-core");
-const { executablePath } = require("puppeteer");
+const chromium = require("@sparticuz/chromium");
 const template = require("../templates/paymentReceiptTemplate");
-
-const getChromePath = () =>
-  process.env.PUPPETEER_EXECUTABLE_PATH ||
-  (process.platform === "win32"
-    ? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
-    : executablePath());
 
 module.exports = async (payment, invoice, settings) => {
   let browser;
   try {
-    console.log("🔍 Using Chrome at:", getChromePath());
+    const execPath = process.env.NODE_ENV !== "production"
+      ? (process.platform === "win32"
+          ? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+          : "/usr/bin/google-chrome")
+      : await chromium.executablePath();
+
     browser = await puppeteer.launch({
-      headless: true,
-      executablePath: getChromePath(),
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+      headless: chromium.headless,
+      executablePath: execPath,
+      args: chromium.args,
     });
+
     const page = await browser.newPage();
     const html = template(payment, invoice, settings);
     await page.setContent(html, { waitUntil: "domcontentloaded" });
     await new Promise((r) => setTimeout(r, 1000));
+
     const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
-    console.log("✅ PDF size:", pdfBuffer?.length, "bytes");
+    console.log("✅ Payment PDF size:", pdfBuffer?.length, "bytes");
     return pdfBuffer;
+
   } catch (err) {
-    console.error("❌ PDF error:", err.message);
-    return null;
+    console.error("❌ Payment PDF error:", err.message);
+    throw err;
   } finally {
     if (browser) await browser.close();
   }
