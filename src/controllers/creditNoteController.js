@@ -23,7 +23,8 @@ exports.getAllCreditNotes = async (req, res) => {
       orderBy: { createdAt: "desc" },
     });
 
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const protocol = process.env.NODE_ENV === "production" ? "https" : req.protocol;
+const baseUrl = `${protocol}://${req.get("host")}`;
 
     const formatted = credits.map((credit) => ({
       id: credit.id,
@@ -73,7 +74,8 @@ exports.getCreditNote = async (req, res) => {
       return errorResponse(res, "Credit note not found", 404);
     }
 
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
+  const protocol = process.env.NODE_ENV === "production" ? "https" : req.protocol;
+const baseUrl = `${protocol}://${req.get("host")}`;
 
     return successResponse(res, {
       ...credit,
