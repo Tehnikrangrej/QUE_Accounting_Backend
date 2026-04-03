@@ -4,17 +4,16 @@
   "description": "",
   "main": "server.js",
   "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "puppeteer": {
+    "cacheDirectory": "/opt/render/.cache/puppeteer"
+  },
   "scripts": {
     "dev": "nodemon --trace-warnings server.js",
-    "postinstall": "npx puppeteer browsers install chrome",
     "start": "node --trace-warnings server.js",
-    "prisma:generate": "prisma generate",
-    "engines": {
-      "node": ">=18.0.0"
-    },
-    "puppeteer": {
-      "cacheDirectory": "/opt/render/.cache/puppeteer"
-    }
+    "prisma:generate": "prisma generate"
   },
   "keywords": [],
   "author": "",
@@ -22,6 +21,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.3.0",
     "@prisma/client": "^7.3.0",
+    "@sparticuz/chromium": "^143.0.4",
     "axios": "^1.13.5",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^1.41.3",
@@ -34,11 +34,11 @@
     "pdfkit": "^0.17.2",
     "pg": "^8.17.2",
     "prisma": "^7.3.0",
+    "puppeteer": "^22.15.0",
     "puppeteer-core": "^22.15.0",
     "streamifier": "^0.1.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.11",
-    "puppeteer": "^22.15.0"
+    "nodemon": "^3.1.11"
   }
 }
