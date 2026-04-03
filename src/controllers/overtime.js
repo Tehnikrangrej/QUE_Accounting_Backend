@@ -144,7 +144,7 @@ exports.getAllOvertime = async (req, res) => {
     //////////////////////////////////////////////////////
     // GET SETTINGS
     //////////////////////////////////////////////////////
-    const settings = await prisma.businessSettings.findUnique({
+    const settings = await prisma.settings.findUnique({
       where: { businessId },
     });
 
@@ -208,7 +208,7 @@ exports.getSingleOvertime = async (req, res) => {
     //////////////////////////////////////////////////////
     // GET SETTINGS
     //////////////////////////////////////////////////////
-    const settings = await prisma.businessSettings.findUnique({
+    const settings = await prisma.settings.findUnique({
       where: { businessId },
     });
 
@@ -267,7 +267,7 @@ exports.updateOvertime = async (req, res) => {
     //////////////////////////////////////////////////////
     // GET SETTINGS
     //////////////////////////////////////////////////////
-    const settings = await prisma.businessSettings.findUnique({
+    const settings = await prisma.settings.findUnique({
       where: { businessId },
     });
 
