@@ -76,6 +76,7 @@
     leads Lead[]
     deals Deal[]
     activities Activity[]
+    quotations Quotation[]
 }
 
   //////////////////////////////////////////////////////
@@ -101,6 +102,7 @@
       deals Deal[]
     leads Lead[]
     activities Activity[]
+    quotations Quotation[]
 }
 
   //////////////////////////////////////////////////////
@@ -255,6 +257,7 @@ model Customer {
   contracts Contract[]
   deals Deal[]
   activities Activity[]
+  quotations Quotation[]
 }
 
   //////////////////////////////////////////////////////
@@ -886,6 +889,7 @@ assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
   @@index([businessId])
   @@index([customerId])
   activities Activity[]
+  quotations Quotation[]
 }
 
 model Activity {
@@ -940,4 +944,78 @@ model Activity {
   updatedAt    DateTime @updatedAt
 
   @@index([businessId])
+}
+
+model Quotation {
+  id            String   @id @default(uuid())
+
+  //////////////////////////////////////////////////////
+  // BUSINESS
+  //////////////////////////////////////////////////////
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  //////////////////////////////////////////////////////
+  // BASIC INFO
+  //////////////////////////////////////////////////////
+  quoteNumber   String   @unique
+  title         String?
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id])
+
+  dealId        String?
+  deal          Deal? @relation(fields: [dealId], references: [id])
+
+  assignedToId  String?
+  assignedTo    BusinessUser? @relation(fields: [assignedToId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // STATUS
+  //////////////////////////////////////////////////////
+  status        String   @default("Draft")
+
+  //////////////////////////////////////////////////////
+  // PRICING
+  //////////////////////////////////////////////////////
+  subtotal      Float
+  tax           Float?
+  discount      Float?
+  totalAmount   Float
+
+  //////////////////////////////////////////////////////
+  // DATES
+  //////////////////////////////////////////////////////
+  issueDate     DateTime
+  expiryDate    DateTime?
+
+  //////////////////////////////////////////////////////
+  // NOTES
+  //////////////////////////////////////////////////////
+  notes         String?
+
+  //////////////////////////////////////////////////////
+  // RELATION
+  //////////////////////////////////////////////////////
+  items         QuotationItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([businessId])
+}
+
+model QuotationItem {
+  id           String   @id @default(uuid())
+
+  quotationId  String
+  quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  name         String
+  quantity     Int
+  price        Float
+  total        Float
 }
