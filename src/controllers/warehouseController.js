@@ -5,7 +5,7 @@ const prisma = require("../config/prisma");
 //////////////////////////////////////////////////////
 exports.createWarehouse = async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, address, city, country } = req.body;
 
     if (!name) {
       return res.status(400).json({
@@ -16,18 +16,27 @@ exports.createWarehouse = async (req, res) => {
 
     const warehouse = await prisma.warehouse.create({
       data: {
-        ...req.body,
+        name,
+        address,
+        city,
+        country,
         businessId: req.business.id,
       },
     });
 
-    res.status(201).json({ success: true, warehouse });
+    res.status(201).json({
+      success: true,
+      warehouse,
+    });
 
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("createWarehouse error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
-
 //////////////////////////////////////////////////////
 // GET ALL
 //////////////////////////////////////////////////////
