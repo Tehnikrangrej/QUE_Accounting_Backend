@@ -2,21 +2,21 @@ const router = require("express").Router();
 const auth = require("../middlewares/authMiddleware");
 const business = require("../middlewares/business.middleware");
 const checkPermission = require("../middlewares/checkPermission");
-const Controller = require("../controllers/vendor");
+const Controller = require("../controllers/PO.Controller");
 
 router.post(
   "/",
   auth,
   business,
-  checkPermission("vendor", "create"),
-  Controller.createVendor
+  checkPermission("purchase_order", "create"),
+  Controller.createPurchaseOrder
 );
 
 router.get(
   "/",
   auth,
   business,
-  Controller.getVendors
+  Controller.getPurchaseOrders
 );
 
 router.get(
@@ -24,23 +24,23 @@ router.get(
   auth,
   business,
 
-  Controller.getVendor
+  Controller.getPurchaseOrderById
 );
 
 router.put(
   "/:id",
   auth,
   business,
-  checkPermission("vendor", "update"),
-  Controller.updateVendor
+  checkPermission("purchase_order", "update"),
+  Controller.updatePurchaseOrder
 );
 
 router.delete(
   "/:id",
   auth,
   business,
-  checkPermission("vendor", "delete"),
-  Controller.deleteVendor
+  checkPermission("purchase_order", "delete"),
+  Controller.deletePurchaseOrder
 );
 
 module.exports = router;

@@ -78,6 +78,9 @@
     activities Activity[]
     quotations Quotation[]
     salesOrders SalesOrder[]
+    bills Bill[]
+    purchaseOrders PurchaseOrder[]
+    vendors Vendor[]
 }
 
   //////////////////////////////////////////////////////
@@ -105,6 +108,7 @@
     activities Activity[]
     quotations Quotation[]
     salesOrders SalesOrder[]
+    purchaseOrders PurchaseOrder[]
 }
 
   //////////////////////////////////////////////////////
@@ -406,13 +410,14 @@ model Payment {
   //////////////////////////////////////////////////////
   // RELATIONS
   //////////////////////////////////////////////////////
-  invoiceId     String
+
   businessId    String
   paymentNumber String      // ⭐ ADD THIS
-
-  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId String?
+invoice   Invoice? @relation(fields: [invoiceId], references: [id])
   business      Business @relation(fields: [businessId], references: [id])
-
+   billId        String?
+  bill          Bill? @relation(fields: [billId], references: [id])
   //////////////////////////////////////////////////////
   // PAYMENT DETAILS
   //////////////////////////////////////////////////////
@@ -445,17 +450,19 @@ model CreditNote {
   // RELATIONS
   ////////////////////////////////////////////////////
   businessId       String
-  customerId       String
+  customerId       String?
   invoiceId        String?   // nullable (credit may exist without invoice)
-
+  vendorId         String?   // for bill credits
   business Business @relation(fields: [businessId], references: [id])
-  customer Customer @relation(fields: [customerId], references: [id])
+ customer Customer? @relation(fields: [customerId], references: [id])
   invoice  Invoice? @relation(fields: [invoiceId], references: [id])
+  vendor   Vendor? @relation(fields: [vendorId], references: [id])
 
   ////////////////////////////////////////////////////
   // CREDIT DATA
   ////////////////////////////////////////////////////
   creditNumber     String
+  type             CreditNoteType   // 🔥 ADD THIS
   amount           Float
   remainingAmount  Float
 
@@ -474,6 +481,10 @@ model CreditNote {
 enum CreditNoteStatus {
  OPEN
  CLOSED
+}
+enum CreditNoteType {
+  INVOICE
+  BILL
 }
 
 model Employee {
@@ -641,15 +652,54 @@ model Expense {
 
 model Vendor {
   id         String   @id @default(uuid())
-  businessId String
 
+  //////////////////////////////////////////////////////
+  // BUSINESS
+  //////////////////////////////////////////////////////
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // BASIC INFO
+  //////////////////////////////////////////////////////
   name       String
   email      String?
   phone      String?
 
-  createdAt  DateTime @default(now())
+  //////////////////////////////////////////////////////
+  // COMPANY DETAILS
+  //////////////////////////////////////////////////////
+  vatNumber  String?
+  website    String?
 
-  expenses   Expense[]
+  //////////////////////////////////////////////////////
+  // ADDRESS
+  //////////////////////////////////////////////////////
+  address    String?
+  city       String?
+  state      String?
+  zipCode    String?
+  country    String?
+
+  //////////////////////////////////////////////////////
+  // STATUS
+  //////////////////////////////////////////////////////
+  isActive   Boolean  @default(true)
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+  expenses        Expense[]
+  purchaseOrders  PurchaseOrder[]   // ✅ NEW
+  bills           Bill[]            // ✅ FUTURE
+
+  //////////////////////////////////////////////////////
+  // META
+  //////////////////////////////////////////////////////
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  creditNotes CreditNote[]
 }
 
 model CustomerContact {
@@ -1096,4 +1146,138 @@ model SalesOrderItem {
   quantity     Int
   price        Float
   total        Float
+}
+
+model PurchaseOrder {
+  id            String   @id @default(uuid())
+
+  //////////////////////////////////////////////////////
+  // BUSINESS
+  //////////////////////////////////////////////////////
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  //////////////////////////////////////////////////////
+  // BASIC
+  //////////////////////////////////////////////////////
+  poNumber      String   @unique
+  status        String   @default("Draft")
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+  vendorId      String
+  vendor        Vendor @relation(fields: [vendorId], references: [id])
+
+  assignedToId  String?
+  assignedTo    BusinessUser? @relation(fields: [assignedToId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // PRICING
+  //////////////////////////////////////////////////////
+  subtotal      Float
+  tax           Float?
+  discount      Float?
+  totalAmount   Float
+
+  //////////////////////////////////////////////////////
+  // DATES
+  //////////////////////////////////////////////////////
+  orderDate     DateTime
+  expectedDeliveryDate DateTime?
+
+  //////////////////////////////////////////////////////
+  // NOTES
+  //////////////////////////////////////////////////////
+  notes         String?
+
+  items         PurchaseOrderItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([businessId])
+  bills Bill[]
+}
+
+model PurchaseOrderItem {
+  id               String   @id @default(uuid())
+
+  purchaseOrderId  String
+  purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  name             String
+  quantity         Int
+  price            Float
+  total            Float
+}
+
+model Bill {
+  id            String   @id @default(uuid())
+
+  //////////////////////////////////////////////////////
+  // BUSINESS
+  //////////////////////////////////////////////////////
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // BASIC
+  //////////////////////////////////////////////////////
+  billNumber    String
+  status        BillStatus @default(UNPAID)
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+  vendorId      String
+  vendor        Vendor @relation(fields: [vendorId], references: [id])
+
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // PRICING
+  //////////////////////////////////////////////////////
+  subtotal      Float
+  tax           Float?
+  discount      Float?
+  totalAmount   Float
+
+  //////////////////////////////////////////////////////
+  // DATES
+  //////////////////////////////////////////////////////
+  billDate      DateTime
+  dueDate       DateTime?
+
+  //////////////////////////////////////////////////////
+  // NOTES
+  //////////////////////////////////////////////////////
+  notes         String?
+
+  items         BillItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([businessId, billNumber])
+  @@index([businessId])
+  payments Payment[]
+}
+model BillItem {
+  id        String   @id @default(uuid())
+
+  billId    String
+  bill      Bill @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  name      String
+  quantity  Int
+  price     Float
+  total     Float
+}
+
+enum BillStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
 }

@@ -1,18 +1,23 @@
 const prisma = require("../config/prisma");
 const { successResponse, errorResponse } = require("../utils/response");
-const createCreditNote = require("../utils/createCreditNote");
 
-const generatePaymentPdf = require("../utils/generatePaymentPdf");
+const createCreditNote = require("../utils/createCreditNote");
+const generateCreditNumber = require("../utils/generateCreditNumber");
+
+const generatePaymentPdf = require("../utils/generatePaymentPdf"); // invoice
+const generateBillPaymentPdf = require("../utils/generateBillPaymentPdf"); // bill
+
 const uploadPaymentPdf = require("../utils/uploadPaymentPdf");
 
 //////////////////////////////////////////////////////
-// CREATE PAYMENT
+// CREATE PAYMENT (INVOICE + BILL)
 //////////////////////////////////////////////////////
 exports.createPayment = async (req, res) => {
   try {
     const businessId = req.business.id;
     const userId = req.user.userId || req.user.id;
-    const { invoiceId } = req.params;
+
+    const { invoiceId, billId } = req.params;
 
     const {
       amount,
@@ -22,25 +27,166 @@ exports.createPayment = async (req, res) => {
       note,
     } = req.body;
 
+//////////////////////////////////////////////////////
+// 🔥 BILL PAYMENT (UPDATED & FIXED)
+//////////////////////////////////////////////////////
+if (billId) {
+  const bill = await prisma.bill.findFirst({
+    where: { id: billId, businessId },
+    include: { payments: true, vendor: true },
+  });
+
+  if (!bill) {
+    return errorResponse(res, "Bill not found", 404);
+  }
+
+  ////////////////////////////////////////////////////
+  // ❌ PREVENT PAYMENT IF BILL IS ALREADY PAID
+  ////////////////////////////////////////////////////
+  if (bill.status === "PAID") {
+    return errorResponse(res, "Bill is already paid", 400);
+  }
+
+  ////////////////////////////////////////////////////
+  // CALCULATIONS (FIXED)
+  ////////////////////////////////////////////////////
+  const previousPaid = bill.payments.reduce(
+    (sum, p) => sum + Number(p.amount || 0),
+    0
+  );
+
+  const currentAmount = Number(amount || 0);
+
+  const totalPaid = previousPaid + currentAmount;
+
+  const billTotal = Number(bill.totalAmount || 0);
+
+  const remaining = billTotal - totalPaid;
+
+  ////////////////////////////////////////////////////
+  // PAYMENT NUMBER
+  ////////////////////////////////////////////////////
+  const lastPayment = await prisma.payment.findFirst({
+    where: { businessId },
+    orderBy: { paymentNumber: "desc" },
+    select: { paymentNumber: true },
+  });
+
+  let paymentNumber = "P-001";
+
+  if (lastPayment?.paymentNumber) {
+    const lastNumber = parseInt(lastPayment.paymentNumber.split("-")[1]);
+    paymentNumber = `P-${String(lastNumber + 1).padStart(3, "0")}`;
+  }
+
+  ////////////////////////////////////////////////////
+  // CREATE PAYMENT
+  ////////////////////////////////////////////////////
+  let payment = await prisma.payment.create({
+    data: {
+      paymentNumber,
+      billId,
+      businessId,
+      amount: currentAmount,
+      paymentDate: new Date(paymentDate),
+      paymentMode,
+      transactionId,
+      note,
+      createdBy: userId,
+    },
+  });
+
+  ////////////////////////////////////////////////////
+  // GENERATE BILL PAYMENT PDF
+  ////////////////////////////////////////////////////
+  const settings = await prisma.settings.findUnique({
+    where: { businessId },
+  });
+
+  const pdfBuffer = await generateBillPaymentPdf(payment, bill, settings);
+
+  const pdfUrl = await uploadPaymentPdf(pdfBuffer, payment.id);
+
+  payment = await prisma.payment.update({
+    where: { id: payment.id },
+    data: { pdfUrl },
+  });
+
+  ////////////////////////////////////////////////////
+  // CREDIT NOTE (ONLY IF OVERPAYMENT)
+  ////////////////////////////////////////////////////
+  let creditNote = null;
+
+  if (totalPaid > billTotal) {
+    const extraAmount = totalPaid - billTotal;
+
+    const creditNumber = await generateCreditNumber(
+      businessId,
+      "BILL"
+    );
+
+    creditNote = await prisma.creditNote.create({
+      data: {
+        business: {
+          connect: { id: businessId },
+        },
+        vendor: {
+          connect: { id: bill.vendorId },
+        },
+        creditNumber,
+        type: "BILL",
+        amount: extraAmount,
+        remainingAmount: extraAmount,
+        reason: "Overpayment from bill",
+        status: "OPEN",
+      },
+    });
+  }
+
+  ////////////////////////////////////////////////////
+  // UPDATE BILL STATUS
+  ////////////////////////////////////////////////////
+  let status = "UNPAID";
+
+  if (totalPaid === 0) {
+    status = "UNPAID";
+  } else if (totalPaid < billTotal) {
+    status = "PARTIALLY_PAID";
+  } else {
+    status = "PAID"; // includes overpayment
+  }
+
+  await prisma.bill.update({
+    where: { id: billId },
+    data: { status },
+  });
+
+  ////////////////////////////////////////////////////
+  // RESPONSE
+  ////////////////////////////////////////////////////
+  return successResponse(
+    res,
+    {
+      payment,
+      remaining: Math.max(billTotal - totalPaid, 0),
+      creditNote,
+    },
+    "Bill payment recorded successfully"
+  );
+}
     ////////////////////////////////////////////////////
-    // GET INVOICE
+    // 🔥 INVOICE PAYMENT
     ////////////////////////////////////////////////////
+
     const invoice = await prisma.invoice.findFirst({
       where: { id: invoiceId, businessId },
-      include: {
-        payments: true,
-        customer: true,
-        items: true,
-      },
+      include: { payments: true, customer: true, items: true },
     });
 
     if (!invoice) {
       return errorResponse(res, "Invoice not found", 404);
     }
 
-    ////////////////////////////////////////////////////
-    // CALCULATIONS
-    ////////////////////////////////////////////////////
     const previousPaid = invoice.payments.reduce(
       (sum, p) => sum + Number(p.amount || 0),
       0
@@ -49,9 +195,6 @@ exports.createPayment = async (req, res) => {
     const remaining =
       Number(invoice.grandTotal || 0) - previousPaid;
 
-    ////////////////////////////////////////////////////
-    // PAYMENT NUMBER
-    ////////////////////////////////////////////////////
     const lastPayment = await prisma.payment.findFirst({
       where: { businessId },
       orderBy: { paymentNumber: "desc" },
@@ -68,7 +211,7 @@ exports.createPayment = async (req, res) => {
     ////////////////////////////////////////////////////
     // CREATE PAYMENT
     ////////////////////////////////////////////////////
-    const payment = await prisma.payment.create({
+    let payment = await prisma.payment.create({
       data: {
         paymentNumber,
         invoiceId,
@@ -83,7 +226,7 @@ exports.createPayment = async (req, res) => {
     });
 
     ////////////////////////////////////////////////////
-    // CREDIT NOTE
+    // CREDIT NOTE (INVOICE)
     ////////////////////////////////////////////////////
     let creditNote = null;
 
@@ -92,11 +235,12 @@ exports.createPayment = async (req, res) => {
         invoice,
         businessId,
         extraAmount: Number(amount) - remaining,
+        type: "INVOICE",
       });
     }
 
     ////////////////////////////////////////////////////
-    // UPDATE STATUS
+    // UPDATE INVOICE STATUS
     ////////////////////////////////////////////////////
     const totalPaid = previousPaid + Number(amount || 0);
 
@@ -111,7 +255,7 @@ exports.createPayment = async (req, res) => {
     });
 
     ////////////////////////////////////////////////////
-    // REFRESH INVOICE (🔥 FIXED)
+    // GENERATE INVOICE PAYMENT PDF
     ////////////////////////////////////////////////////
     const updatedInvoice = await prisma.invoice.findUnique({
       where: { id: invoiceId },
@@ -119,59 +263,32 @@ exports.createPayment = async (req, res) => {
         id: true,
         invoiceNumber: true,
         invoiceDate: true,
-        grandTotal: true, // ✅ IMPORTANT
+        grandTotal: true,
         customer: true,
         payments: true,
       },
     });
 
-    ////////////////////////////////////////////////////
-    // GENERATE PDF (🔥 FIXED + DEBUG)
-    ////////////////////////////////////////////////////
-    let finalPayment = payment;
+    const settings = await prisma.settings.findUnique({
+      where: { businessId },
+    });
 
-    try {
-      console.log("👉 Generating PDF...");
+    const pdfBuffer2 = await generatePaymentPdf(
+      payment,
+      updatedInvoice,
+      settings
+    );
 
-      const settings = await prisma.settings.findUnique({
-        where: { businessId },
-      });
+    const pdfUrl2 = await uploadPaymentPdf(pdfBuffer2, payment.id);
 
-      const pdfBuffer = await generatePaymentPdf(
-        payment,
-        updatedInvoice,
-        settings
-      );
+    payment = await prisma.payment.update({
+      where: { id: payment.id },
+      data: { pdfUrl: pdfUrl2 },
+    });
 
-      console.log("✅ PDF Generated");
-
-      const pdfUrl = await uploadPaymentPdf(pdfBuffer, payment.id);
-
-      console.log("✅ Uploaded:", pdfUrl);
-
-      finalPayment = await prisma.payment.update({
-        where: { id: payment.id },
-        data: { pdfUrl },
-      });
-
-    } catch (err) {
-      console.error("🔥 PDF ERROR:", err);
-      return res.status(500).json({
-        success: false,
-        message: "PDF generation failed",
-        error: err.message,
-      });
-    }
-
-    ////////////////////////////////////////////////////
-    // RESPONSE
-    ////////////////////////////////////////////////////
     return successResponse(
       res,
-      {
-        payment: finalPayment,
-        creditNote,
-      },
+      { payment, creditNote },
       "Payment recorded successfully"
     );
 
@@ -180,6 +297,7 @@ exports.createPayment = async (req, res) => {
     return errorResponse(res, "Internal server error", 500);
   }
 };
+
 //////////////////////////////////////////////////////
 // GET PAYMENTS BY INVOICE
 //////////////////////////////////////////////////////
@@ -188,18 +306,91 @@ exports.getInvoicePayments = async (req, res) => {
     const { invoiceId } = req.params;
 
     const payments = await prisma.payment.findMany({
-      where: {
-        invoiceId,
-        businessId: req.business.id,
-      },
+      where: { invoiceId, businessId: req.business.id },
       orderBy: { createdAt: "desc" },
     });
 
     return successResponse(res, payments);
 
   } catch (err) {
-    console.error(err);
     return errorResponse(res, "Internal server error", 500);
+  }
+};
+
+//////////////////////////////////////////////////////
+// 🔥 GET PAYMENTS BY BILL (NEW)
+//////////////////////////////////////////////////////
+exports.getBillPayments = async (req, res) => {
+  try {
+    const { billId } = req.params;
+
+    const payments = await prisma.payment.findMany({
+      where: { billId, businessId: req.business.id },
+      orderBy: { createdAt: "desc" },
+      include: {
+        bill: {
+          select: {
+            id: true,
+            billNumber: true,
+            totalAmount: true,
+            vendor: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return successResponse(res, payments);
+
+  } catch (err) {
+    return errorResponse(res, "Internal server error", 500);
+  }
+};
+
+//////////////////////////////////////////////////////
+// GET ALL PAYMENTS (UPDATED WITH BILL)
+//////////////////////////////////////////////////////
+exports.getPayments = async (req, res) => {
+  try {
+    const businessId = req.business.id;
+
+    const payments = await prisma.payment.findMany({
+      where: { businessId },
+      include: {
+        invoice: {
+          select: {
+            id: true,
+            invoiceNumber: true,
+          },
+        },
+        bill: {
+          select: {
+            id: true,
+            billNumber: true,
+            vendor: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json({
+      success: true,
+      data: payments,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch payments",
+    });
   }
 };
 
@@ -236,74 +427,4 @@ exports.downloadPaymentPdf = async (req, res) => {
     });
   }
 };
-// GET ALL PAYMENTS
-//////////////////////////////////////////////////////
-exports.getPayments = async (req, res) => {
-  try {
-    const businessId = req.business.id;
-    const { page = 1, limit = 10 } = req.query;
-
-    const skip = (Number(page) - 1) * Number(limit);
-
-    const payments = await prisma.payment.findMany({
-      where: { businessId },
-
-      //////////////////////////////////////////////////
-      // ⭐ SELECT INSTEAD OF INCLUDE
-      //////////////////////////////////////////////////
-      select: {
-        id: true,
-        amount: true,
-        paymentDate: true,
-        paymentMode: true,
-        transactionId: true,
-        note: true,
-        pdfUrl: true,
-        createdBy: true,
-        createdAt: true,
-
-        invoice: {
-          select: {
-            id: true,
-            invoiceNumber: true,
-            customer: {
-              select: {
-                company: true,
-              },
-            },
-
-            ////////////////////////////////////////////
-            // CREDIT NOTES ONLY HERE
-            ////////////////////////////////////////////
-            creditNotes: {
-              select: {
-                id: true,
-                creditNumber: true,
-                amount: true,
-                status: true,
-              },
-            },
-          },
-        },
-      },
-
-      orderBy: {
-        createdAt: "desc",
-      },
-      skip,
-      take: Number(limit),
-    });
-
-    res.json({
-      success: true,
-      data: payments,
-    });
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch payments",
-    });
-  }
-};
+// 

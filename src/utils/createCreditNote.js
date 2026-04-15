@@ -3,17 +3,34 @@ const cloudinary = require("../config/cloudinary");
 const generatePdf = require("./generatePdf");
 const creditTemplate = require("../templates/creditNoteTemplate");
 
-module.exports = async ({ invoice, businessId, extraAmount }) => {
+module.exports = async ({
+  invoice = null,
+  bill = null,
+  businessId,
+  extraAmount,
+  type = "INVOICE", // 🔥 NEW
+}) => {
   try {
 
     //////////////////////////////////////////////////////
-    // CREDIT NUMBER
+    // CREDIT NUMBER (SEPARATE FOR BILL / INVOICE)
     //////////////////////////////////////////////////////
-    const count = await prisma.creditNote.count({
-      where: { businessId },
+    const prefix = type === "BILL" ? "BCN" : "CN";
+
+    const last = await prisma.creditNote.findFirst({
+      where: { businessId, type },
+      orderBy: { createdAt: "desc" },
+      select: { creditNumber: true },
     });
 
-    const creditNumber = `CN-${String(count + 1).padStart(4, "0")}`;
+    let next = 1;
+
+    if (last?.creditNumber) {
+      const lastNum = parseInt(last.creditNumber.split("-")[1]);
+      next = lastNum + 1;
+    }
+
+    const creditNumber = `${prefix}-${String(next).padStart(3, "0")}`;
 
     //////////////////////////////////////////////////////
     // CREATE CREDIT NOTE
@@ -21,27 +38,33 @@ module.exports = async ({ invoice, businessId, extraAmount }) => {
     const credit = await prisma.creditNote.create({
       data: {
         businessId,
-        customerId: invoice.customerId,
-        invoiceId: invoice.id,
+        customerId: invoice?.customerId || null,
+        vendorId: bill?.vendorId || null,
+        invoiceId: invoice?.id || null,
         creditNumber,
+        type,
         amount: Number(extraAmount),
         remainingAmount: Number(extraAmount),
-        reason: "Invoice Overpayment",
+        reason:
+          type === "BILL"
+            ? "Bill Overpayment"
+            : "Invoice Overpayment",
         status: "OPEN",
       },
     });
 
     //////////////////////////////////////////////////////
-    // 🔥 FETCH COMPLETE DATA
+    // FETCH COMPLETE DATA
     //////////////////////////////////////////////////////
     const creditData = await prisma.creditNote.findUnique({
       where: { id: credit.id },
       include: {
         customer: true,
+        vendor: true, // 🔥 IMPORTANT
         invoice: {
-          include:{
+          include: {
             items: true,
-            },
+          },
         },
       },
     });
@@ -54,7 +77,7 @@ module.exports = async ({ invoice, businessId, extraAmount }) => {
     const pdfBuffer = await generatePdf(html);
 
     //////////////////////////////////////////////////////
-    // CLOUDINARY BUFFER UPLOAD (IMPORTANT)
+    // UPLOAD TO CLOUDINARY
     //////////////////////////////////////////////////////
     const upload = await new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
@@ -82,6 +105,7 @@ module.exports = async ({ invoice, businessId, extraAmount }) => {
       },
       include: {
         customer: true,
+        vendor: true,
         invoice: true,
       },
     });
