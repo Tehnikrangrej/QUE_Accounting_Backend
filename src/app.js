@@ -37,6 +37,9 @@ const billRoutes = require("./routes/BillRoutes");
 const warehouseRoutes = require("./routes/warehouseRoutes");
 const stockRoutes = require("./routes/stockRoutes");
 const productRoutes = require("./routes/productRoutes");
+const accontRoutes = require("./routes/accountRoutes");
+const journalEntryRoutes = require("./routes/journalRoutes");
+const reportRoutes = require("./routes/reportRoutes"); 
 const app = express();
 
 app.use(cors());
@@ -77,6 +80,10 @@ app.use("/api/bills", billRoutes);
 app.use("/api/warehouses", warehouseRoutes);
 app.use("/api/stock", stockRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/accounts", accontRoutes);
+app.use("/api/journal-entries", journalEntryRoutes);
+app.use("/api/reports", reportRoutes);
+
 app.get("/", (req, res) => {
   res.send("QUE Accounting Backend Running...");
 });

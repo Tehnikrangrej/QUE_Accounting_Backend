@@ -83,6 +83,9 @@
     vendors Vendor[]
     warehouses Warehouse[]
     products Product[]
+    journalEntries JournalEntry[]
+    accounts Account[]
+    
 }
 
   //////////////////////////////////////////////////////
@@ -1344,3 +1347,44 @@ model Stock {
 
   @@unique([productId, warehouseId])
 }
+
+model Account {
+  id         String   @id @default(uuid())
+  businessId String
+
+  name       String
+  type       AccountType
+  code       String?
+  isActive   Boolean  @default(true)
+
+  createdAt  DateTime @default(now())
+
+  business   Business @relation(fields: [businessId], references: [id])
+  entries    JournalEntry[]
+}
+
+model JournalEntry {
+  id          String   @id @default(uuid())
+  businessId  String
+
+  accountId   String
+  debit       Float    @default(0)
+  credit      Float    @default(0)
+
+  description String?
+  date        DateTime @default(now())
+
+  account     Account  @relation(fields: [accountId], references: [id])
+  business    Business @relation(fields: [businessId], references: [id])
+}
+
+
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  INCOME
+  EXPENSE
+  EQUITY
+}
+
