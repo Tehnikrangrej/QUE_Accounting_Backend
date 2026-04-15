@@ -34,6 +34,9 @@ const quotationRoutes = require("./routes/quotationRoutes");
 const salesorderRoutes = require("./routes/salesorderRoutes");
 const purchaseOrderRoutes = require("./routes/PORoutes");
 const billRoutes = require("./routes/BillRoutes");
+const warehouseRoutes = require("./routes/warehouseRoutes");
+const stockRoutes = require("./routes/stockRoutes");
+const productRoutes = require("./routes/productRoutes");
 const app = express();
 
 app.use(cors());
@@ -71,6 +74,9 @@ app.use("/api/quotation", quotationRoutes);
 app.use("/api/salesorder", salesorderRoutes);
 app.use("/api/purchase-order", purchaseOrderRoutes);
 app.use("/api/bills", billRoutes);
+app.use("/api/warehouses", warehouseRoutes);
+app.use("/api/stock", stockRoutes);
+app.use("/api/products", productRoutes);
 app.get("/", (req, res) => {
   res.send("QUE Accounting Backend Running...");
 });
