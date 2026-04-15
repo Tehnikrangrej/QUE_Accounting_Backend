@@ -7,16 +7,43 @@ exports.createLead = async (req, res) => {
   try {
     const data = req.body;
 
+    //////////////////////////////////////////////////////
+    // REQUIRED FIELD
+    //////////////////////////////////////////////////////
     if (!data.name) {
       return res.status(400).json({
         success: false,
         message: "Name is required",
       });
     }
+
+    //////////////////////////////////////////////////////
+    // ✅ VALIDATE ASSIGNED USER
+    //////////////////////////////////////////////////////
+    if (data.assignedToId) {
+      const member = await prisma.businessUser.findFirst({
+        where: {
+          id: data.assignedToId,
+          businessId: req.business.id,
+          isActive: true,
+        },
+      });
+
+      if (!member) {
+        return res.status(400).json({
+          success: false,
+          message: "Assigned user not part of this business",
+        });
+      }
+    }
+
+    //////////////////////////////////////////////////////
+    // CREATE LEAD
+    //////////////////////////////////////////////////////
     const lead = await prisma.lead.create({
       data: {
         ...data,
-        businessId: req.business.id // ✅ FIX
+        businessId: req.business.id,
       },
     });
 
@@ -42,7 +69,13 @@ exports.getAllLeads = async (req, res) => {
         businessId: req.business.id // ✅ FIX
       },
       orderBy: { createdAt: 'desc' },
-      include: { stage: true }
+      include: { stage: true,
+         assignedTo: {
+    include: {
+      user: true,
+    },
+  },
+       }
     });
 
     res.status(200).json({
@@ -73,7 +106,12 @@ exports.getLeadDetails = async (req, res) => {
         activities: true,
         notes: true,
         tasks: true,
-        reminders: true
+        reminders: true,
+        assignedTo: {
+  include: {
+    user: true,
+  },
+},
       }
     });
 

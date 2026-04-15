@@ -74,6 +74,7 @@
     contracts Contract[]
     contractTypes ContractType[]
     leads Lead[]
+    deals Deal[]
 }
 
   //////////////////////////////////////////////////////
@@ -96,7 +97,9 @@
     @@unique([userId, businessId]) // prevents duplicate membership
     @@index([businessId])
     @@map("business_users")
-  }
+      deals Deal[]
+    leads Lead[]
+}
 
   //////////////////////////////////////////////////////
   // ROLES (Business Scoped)
@@ -248,6 +251,7 @@ model Customer {
   creditNotes CreditNote[]
   customerContacts CustomerContact[]
   contracts Contract[]
+  deals Deal[]
 }
 
   //////////////////////////////////////////////////////
@@ -666,6 +670,7 @@ model CustomerContact {
 
   @@index([customerId])
   @@index([businessId])
+  deals Deal[]
 }
 
 model Contract {
@@ -738,7 +743,8 @@ model Lead {
   status          LeadStatus   @default(NEW)
   source          LeadSource
 
-  assignedTo      String?
+   assignedToId String?
+assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
   tags            String[]
   leadValue       Float?
 
@@ -823,4 +829,55 @@ enum LeadSource {
   REFERRAL
   CALL
   OTHER
+}
+
+model Deal {
+  id          String   @id @default(uuid())
+
+  //////////////////////////////////////////////////////
+  // BUSINESS RELATION
+  //////////////////////////////////////////////////////
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  //////////////////////////////////////////////////////
+  // DEAL INFO
+  //////////////////////////////////////////////////////
+  name        String
+  amount      Float
+  currency    String   @default("INR")
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  contactId   String?
+  contact     CustomerContact? @relation(fields: [contactId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // PIPELINE
+  //////////////////////////////////////////////////////
+  stage       String   @default("New")
+  probability Int?
+
+  //////////////////////////////////////////////////////
+  // DATES
+  //////////////////////////////////////////////////////
+  expectedCloseDate DateTime?
+
+  //////////////////////////////////////////////////////
+  // META
+  //////////////////////////////////////////////////////
+  assignedToId String?
+assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
+  source     String?
+  description String?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([customerId])
 }
