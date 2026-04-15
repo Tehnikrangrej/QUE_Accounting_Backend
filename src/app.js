@@ -31,6 +31,7 @@ const leadRoutes = require("./routes/leadRoutes");
 const dealRoutes = require("./routes/dealRoutes");
 const activityRoutes = require("./routes/ActivityRoutes");
 const quotationRoutes = require("./routes/quotationRoutes");
+const salesorderRoutes = require("./routes/salesorderRoutes");
 const app = express();
 
 app.use(cors());
@@ -65,6 +66,7 @@ app.use("/api/leads", leadRoutes);
 app.use("/api/deals", dealRoutes);
 app.use("/api/activities", activityRoutes);
 app.use("/api/quotation", quotationRoutes);
+app.use("/api/salesorder", salesorderRoutes);
 app.get("/", (req, res) => {
   res.send("QUE Accounting Backend Running...");
 });

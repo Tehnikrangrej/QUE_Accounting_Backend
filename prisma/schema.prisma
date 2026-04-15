@@ -77,6 +77,7 @@
     deals Deal[]
     activities Activity[]
     quotations Quotation[]
+    salesOrders SalesOrder[]
 }
 
   //////////////////////////////////////////////////////
@@ -103,6 +104,7 @@
     leads Lead[]
     activities Activity[]
     quotations Quotation[]
+    salesOrders SalesOrder[]
 }
 
   //////////////////////////////////////////////////////
@@ -258,6 +260,7 @@ model Customer {
   deals Deal[]
   activities Activity[]
   quotations Quotation[]
+  salesOrders SalesOrder[]
 }
 
   //////////////////////////////////////////////////////
@@ -890,6 +893,7 @@ assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
   @@index([customerId])
   activities Activity[]
   quotations Quotation[]
+  salesOrders SalesOrder[]
 }
 
 model Activity {
@@ -1006,6 +1010,7 @@ model Quotation {
   updatedAt     DateTime @updatedAt
 
   @@index([businessId])
+  salesOrders SalesOrder[]
 }
 
 model QuotationItem {
@@ -1013,6 +1018,75 @@ model QuotationItem {
 
   quotationId  String
   quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  name         String
+  quantity     Int
+  price        Float
+  total        Float
+}
+
+model SalesOrder {
+  id            String   @id @default(uuid())
+
+  //////////////////////////////////////////////////////
+  // BUSINESS
+  //////////////////////////////////////////////////////
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  //////////////////////////////////////////////////////
+  // BASIC
+  //////////////////////////////////////////////////////
+  orderNumber   String   @unique
+  status        String   @default("Draft")
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id])
+
+  quotationId   String?
+  quotation     Quotation? @relation(fields: [quotationId], references: [id])
+
+  dealId        String?
+  deal          Deal? @relation(fields: [dealId], references: [id])
+
+  assignedToId  String?
+  assignedTo    BusinessUser? @relation(fields: [assignedToId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // PRICING
+  //////////////////////////////////////////////////////
+  subtotal      Float
+  tax           Float?
+  discount      Float?
+  totalAmount   Float
+
+  //////////////////////////////////////////////////////
+  // DATES
+  //////////////////////////////////////////////////////
+  orderDate     DateTime
+  deliveryDate  DateTime?
+
+  //////////////////////////////////////////////////////
+  // NOTES
+  //////////////////////////////////////////////////////
+  notes         String?
+
+  items         SalesOrderItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([businessId])
+}
+
+model SalesOrderItem {
+  id           String   @id @default(uuid())
+
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
 
   name         String
   quantity     Int
