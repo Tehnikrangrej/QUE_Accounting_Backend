@@ -10,7 +10,7 @@ exports.createInvoice = async (req, res) => {
   try {
     const {
       customerId,
-      salesOrderId, // ✅ NEW
+      salesOrderId,
       invoiceDate,
       dueDate,
       currency = "AED",
@@ -32,14 +32,11 @@ exports.createInvoice = async (req, res) => {
       });
     }
 
-    //////////////////////////////////////////////////////
-    // DEFAULT VALUES
-    //////////////////////////////////////////////////////
     let finalCustomerId = customerId;
     let finalItems = items;
 
     //////////////////////////////////////////////////////
-    // HANDLE SALES ORDER (AUTO FILL)
+    // HANDLE SALES ORDER
     //////////////////////////////////////////////////////
     if (salesOrderId) {
       const salesOrder = await prisma.salesOrder.findFirst({
@@ -47,9 +44,7 @@ exports.createInvoice = async (req, res) => {
           id: salesOrderId,
           businessId: req.business.id,
         },
-        include: {
-          items: true,
-        },
+        include: { items: true },
       });
 
       if (!salesOrder) {
@@ -59,13 +54,8 @@ exports.createInvoice = async (req, res) => {
         });
       }
 
-      //////////////////////////////////////////////////////
-      // PREVENT DUPLICATE INVOICE
-      //////////////////////////////////////////////////////
       const existing = await prisma.invoice.findFirst({
-        where: {
-          salesOrderId,
-        },
+        where: { salesOrderId },
       });
 
       if (existing) {
@@ -75,7 +65,6 @@ exports.createInvoice = async (req, res) => {
         });
       }
 
-      // ✅ AUTO FILL
       finalCustomerId = salesOrder.customerId;
 
       finalItems = salesOrder.items.map((item) => ({
@@ -114,7 +103,7 @@ exports.createInvoice = async (req, res) => {
     }
 
     //////////////////////////////////////////////////////
-    // FETCH SETTINGS
+    // SETTINGS
     //////////////////////////////////////////////////////
     const settings = await prisma.settings.findUnique({
       where: { businessId: req.business.id },
@@ -131,7 +120,7 @@ exports.createInvoice = async (req, res) => {
         : settings?.defaultTerms || null;
 
     //////////////////////////////////////////////////////
-    // CREATE INVOICE
+    // TRANSACTION
     //////////////////////////////////////////////////////
     const invoice = await prisma.$transaction(async (tx) => {
 
@@ -145,8 +134,7 @@ exports.createInvoice = async (req, res) => {
         const rate = Number(i.rate);
 
         const amount = hours * rate;
-        const taxAmount =
-          (amount * Number(i.taxPercent || 0)) / 100;
+        const taxAmount = (amount * Number(i.taxPercent || 0)) / 100;
 
         subtotal += amount;
         totalTax += taxAmount;
@@ -163,11 +151,14 @@ exports.createInvoice = async (req, res) => {
 
       const grandTotal = subtotal + totalTax - Number(discount);
 
+      //////////////////////////////////////////////////////
+      // CREATE INVOICE
+      //////////////////////////////////////////////////////
       const created = await tx.invoice.create({
         data: {
           businessId: req.business.id,
           customerId: finalCustomerId,
-          salesOrderId, // ✅ SAVE LINK
+          salesOrderId,
 
           invoiceNumber,
 
@@ -192,7 +183,55 @@ exports.createInvoice = async (req, res) => {
       });
 
       //////////////////////////////////////////////////////
-      // OPTIONAL: UPDATE SALES ORDER STATUS
+      // 🔥 ACCOUNTING (ADDED)
+      //////////////////////////////////////////////////////
+      const accounts = await tx.account.findMany({
+        where: {
+          businessId: req.business.id,
+          name: { in: ["Cash", "Sales", "Tax Payable"] },
+        },
+      });
+
+      const cash = accounts.find((a) => a.name === "Cash");
+      const sales = accounts.find((a) => a.name === "Sales");
+      const tax = accounts.find((a) => a.name === "Tax Payable");
+
+      if (!cash || !sales) {
+        throw new Error("Required accounts not found (Cash / Sales)");
+      }
+
+      const journalEntries = [
+        {
+          accountId: cash.id,
+          debit: grandTotal,
+        },
+        {
+          accountId: sales.id,
+          credit: subtotal,
+        },
+      ];
+
+      if (totalTax > 0 && tax) {
+        journalEntries.push({
+          accountId: tax.id,
+          credit: totalTax,
+        });
+      }
+
+      await Promise.all(
+        journalEntries.map((entry) =>
+          tx.journalEntry.create({
+            data: {
+              ...entry,
+              businessId: req.business.id,
+              description: `Invoice ${invoiceNumber}`,
+            },
+          })
+        )
+      );
+
+      //////////////////////////////////////////////////////
+      // UPDATE SALES ORDER
       //////////////////////////////////////////////////////
       if (salesOrderId) {
         await tx.salesOrder.update({
@@ -227,9 +266,6 @@ exports.createInvoice = async (req, res) => {
       console.error("PDF ERROR:", pdfError);
     }
 
-    //////////////////////////////////////////////////////
-    // RESPONSE
-    //////////////////////////////////////////////////////
     return res.status(201).json({
       success: true,
       message: "Invoice created successfully",

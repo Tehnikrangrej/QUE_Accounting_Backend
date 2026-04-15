@@ -86,6 +86,8 @@
     journalEntries JournalEntry[]
     accounts Account[]
     
+    timeEntries TimeEntry[]
+    projects Project[]
 }
 
   //////////////////////////////////////////////////////
@@ -270,6 +272,7 @@ model Customer {
   activities Activity[]
   quotations Quotation[]
   salesOrders SalesOrder[]
+  projects Project[]
 }
 
   //////////////////////////////////////////////////////
@@ -309,6 +312,9 @@ model Customer {
     salesOrderId String?
 salesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id])
     items    InvoiceItem[]
+
+    projectId String?
+project   Project? @relation(fields: [projectId], references: [id])
 
     @@unique([businessId, invoiceNumber]) // invoice numbers unique per business
     @@index([businessId])
@@ -1388,3 +1394,67 @@ enum AccountType {
   EQUITY
 }
 
+model Project {
+  id          String   @id @default(uuid())
+  businessId  String
+
+  name        String
+  description String?
+  status      ProjectStatus @default(ACTIVE)
+
+  customerId  String?
+  customer    Customer? @relation(fields: [customerId], references: [id])
+
+  createdAt   DateTime @default(now())
+
+  tasks       Task[]
+
+  business    Business @relation(fields: [businessId], references: [id])
+
+  timeEntries TimeEntry[]
+
+  invoices Invoice[]
+}
+
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+  ON_HOLD
+}
+
+model Task {
+  id        String   @id @default(uuid())
+  projectId String
+
+  title     String
+  description String?
+  status    TaskStatus @default(TODO)
+
+  createdAt DateTime @default(now())
+
+  project   Project @relation(fields: [projectId], references: [id])
+  timeEntries TimeEntry[]
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+model TimeEntry {
+  id         String   @id @default(uuid())
+  businessId String
+
+  projectId  String
+  taskId     String?
+
+  description String?
+  hours      Float
+
+  date       DateTime @default(now())
+
+  project    Project @relation(fields: [projectId], references: [id])
+  task       Task?   @relation(fields: [taskId], references: [id])
+  business   Business @relation(fields: [businessId], references: [id])
+}
