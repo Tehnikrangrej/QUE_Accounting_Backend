@@ -75,6 +75,7 @@
     contractTypes ContractType[]
     leads Lead[]
     deals Deal[]
+    activities Activity[]
 }
 
   //////////////////////////////////////////////////////
@@ -99,6 +100,7 @@
     @@map("business_users")
       deals Deal[]
     leads Lead[]
+    activities Activity[]
 }
 
   //////////////////////////////////////////////////////
@@ -252,6 +254,7 @@ model Customer {
   customerContacts CustomerContact[]
   contracts Contract[]
   deals Deal[]
+  activities Activity[]
 }
 
   //////////////////////////////////////////////////////
@@ -765,6 +768,8 @@ assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
   updatedAt       DateTime @updatedAt
 
   customers Customer[]
+
+  activity Activity[]
 }
 
 model PipelineStage {
@@ -880,4 +885,59 @@ assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
 
   @@index([businessId])
   @@index([customerId])
+  activities Activity[]
+}
+
+model Activity {
+  id          String   @id @default(uuid())
+
+  //////////////////////////////////////////////////////
+  // BUSINESS
+  //////////////////////////////////////////////////////
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  //////////////////////////////////////////////////////
+  // BASIC INFO
+  //////////////////////////////////////////////////////
+  type        String   // Call, Meeting
+  title       String
+  description String?
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+  leadId      String?
+  lead        Lead? @relation(fields: [leadId], references: [id])
+
+  dealId      String?
+  deal        Deal? @relation(fields: [dealId], references: [id])
+
+  customerId  String?
+  customer    Customer? @relation(fields: [customerId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // ASSIGNED USER (BusinessUser)
+  //////////////////////////////////////////////////////
+  assignedToId String?
+  assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // DATE
+  //////////////////////////////////////////////////////
+  activityDate DateTime
+  duration     Int?
+
+  //////////////////////////////////////////////////////
+  // STATUS
+  //////////////////////////////////////////////////////
+  status       String   @default("Scheduled")
+
+  //////////////////////////////////////////////////////
+  // META
+  //////////////////////////////////////////////////////
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([businessId])
 }
