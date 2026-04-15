@@ -22,8 +22,8 @@ module.exports = async (invoice, settings) => {
     await page.setViewport({ width: 1200, height: 800 });
 
     const html = invoiceTemplate(invoice, settings);
-    await page.setContent(html, { waitUntil: "domcontentloaded" });
-    await new Promise((r) => setTimeout(r, 1000));
+    await page.setContent(html, { waitUntil: "networkidle0" });
+//    await new Promise((r) => setTimeout(r, 1000));
 
     const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
     console.log("✅ PDF size:", pdfBuffer?.length, "bytes");

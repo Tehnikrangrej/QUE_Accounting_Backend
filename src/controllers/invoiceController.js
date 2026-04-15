@@ -10,6 +10,7 @@ exports.createInvoice = async (req, res) => {
   try {
     const {
       customerId,
+      salesOrderId, // ✅ NEW
       invoiceDate,
       dueDate,
       currency = "AED",
@@ -21,21 +22,104 @@ exports.createInvoice = async (req, res) => {
       items = [],
     } = req.body;
 
-    if (!customerId || !invoiceDate || items.length === 0) {
+    //////////////////////////////////////////////////////
+    // BASIC VALIDATION
+    //////////////////////////////////////////////////////
+    if (!invoiceDate) {
       return res.status(400).json({
         success: false,
-        message: "customerId, invoiceDate and items are required",
+        message: "invoiceDate is required",
       });
     }
 
     //////////////////////////////////////////////////////
-    // ✅ FETCH BUSINESS SETTINGS
+    // DEFAULT VALUES
+    //////////////////////////////////////////////////////
+    let finalCustomerId = customerId;
+    let finalItems = items;
+
+    //////////////////////////////////////////////////////
+    // HANDLE SALES ORDER (AUTO FILL)
+    //////////////////////////////////////////////////////
+    if (salesOrderId) {
+      const salesOrder = await prisma.salesOrder.findFirst({
+        where: {
+          id: salesOrderId,
+          businessId: req.business.id,
+        },
+        include: {
+          items: true,
+        },
+      });
+
+      if (!salesOrder) {
+        return res.status(400).json({
+          success: false,
+          message: "Sales Order not found",
+        });
+      }
+
+      //////////////////////////////////////////////////////
+      // PREVENT DUPLICATE INVOICE
+      //////////////////////////////////////////////////////
+      const existing = await prisma.invoice.findFirst({
+        where: {
+          salesOrderId,
+        },
+      });
+
+      if (existing) {
+        return res.status(400).json({
+          success: false,
+          message: "Invoice already created for this Sales Order",
+        });
+      }
+
+      // ✅ AUTO FILL
+      finalCustomerId = salesOrder.customerId;
+
+      finalItems = salesOrder.items.map((item) => ({
+        description: item.name,
+        hours: item.quantity,
+        rate: item.price,
+        taxPercent: 0,
+      }));
+    }
+
+    //////////////////////////////////////////////////////
+    // VALIDATE CUSTOMER
+    //////////////////////////////////////////////////////
+    const customer = await prisma.customer.findFirst({
+      where: {
+        id: finalCustomerId,
+        businessId: req.business.id,
+      },
+    });
+
+    if (!customer) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // VALIDATE ITEMS
+    //////////////////////////////////////////////////////
+    if (!finalItems || finalItems.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Items are required",
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // FETCH SETTINGS
     //////////////////////////////////////////////////////
     const settings = await prisma.settings.findUnique({
       where: { businessId: req.business.id },
     });
 
-    // ✅ AUTO DEFAULT LOGIC
     const finalAdminNote =
       adminNote && adminNote.trim() !== ""
         ? adminNote
@@ -47,17 +131,16 @@ exports.createInvoice = async (req, res) => {
         : settings?.defaultTerms || null;
 
     //////////////////////////////////////////////////////
-    // CREATE INVOICE (TRANSACTION)
+    // CREATE INVOICE
     //////////////////////////////////////////////////////
     const invoice = await prisma.$transaction(async (tx) => {
 
-     const invoiceNumber = await generateInvoiceNumber(
-  req.business.id
-);
+      const invoiceNumber = await generateInvoiceNumber(req.business.id);
+
       let subtotal = 0;
       let totalTax = 0;
 
-      const invoiceItems = items.map((i) => {
+      const invoiceItems = finalItems.map((i) => {
         const hours = Number(i.hours);
         const rate = Number(i.rate);
 
@@ -80,10 +163,12 @@ exports.createInvoice = async (req, res) => {
 
       const grandTotal = subtotal + totalTax - Number(discount);
 
-      return tx.invoice.create({
+      const created = await tx.invoice.create({
         data: {
           businessId: req.business.id,
-          customerId,
+          customerId: finalCustomerId,
+          salesOrderId, // ✅ SAVE LINK
+
           invoiceNumber,
 
           invoiceDate: new Date(invoiceDate),
@@ -93,7 +178,6 @@ exports.createInvoice = async (req, res) => {
           poNumber,
           poDate: poDate ? new Date(poDate) : null,
 
-          // ✅ AUTO FILLED VALUES
           adminNote: finalAdminNote,
           terms: finalTerms,
 
@@ -104,8 +188,20 @@ exports.createInvoice = async (req, res) => {
 
           items: { create: invoiceItems },
         },
-        include: { customer: true, items: true },
+        include: { customer: true, items: true, salesOrder: true },
       });
+
+      //////////////////////////////////////////////////////
+      // OPTIONAL: UPDATE SALES ORDER STATUS
+      //////////////////////////////////////////////////////
+      if (salesOrderId) {
+        await tx.salesOrder.update({
+          where: { id: salesOrderId },
+          data: { status: "Completed" },
+        });
+      }
+
+      return created;
     });
 
     //////////////////////////////////////////////////////
@@ -124,12 +220,11 @@ exports.createInvoice = async (req, res) => {
       finalInvoice = await prisma.invoice.update({
         where: { id: invoice.id },
         data: { pdfUrl },
-        include: { customer: true, items: true },
+        include: { customer: true, items: true, salesOrder: true },
       });
 
     } catch (pdfError) {
-     console.error("PDF ERROR FULL:", pdfError);
-console.error("STACK:", pdfError?.stack);
+      console.error("PDF ERROR:", pdfError);
     }
 
     //////////////////////////////////////////////////////
@@ -143,6 +238,7 @@ console.error("STACK:", pdfError?.stack);
 
   } catch (error) {
     console.error("createInvoice error:", error);
+
     return res.status(500).json({
       success: false,
       message: error.message,
@@ -156,7 +252,7 @@ exports.getInvoices = async (req, res) => {
   try {
     const invoices = await prisma.invoice.findMany({
       where: { businessId: req.business.id },
-      include: { customer: true, items: true },
+      include: { customer: true, items: true, salesOrder: true},
       orderBy: { createdAt: "desc" },
     });
 
@@ -177,7 +273,7 @@ exports.getInvoiceById = async (req, res) => {
         id: req.params.id,
         businessId: req.business.id,
       },
-      include: { customer: true, items: true },
+      include: { customer: true, items: true, salesOrder: true },
     });
 
     if (!invoice) {
@@ -285,6 +381,7 @@ exports.updateInvoice = async (req, res) => {
         include: {
           customer: true,
           items: true,
+          salesOrder: true,
         },
       });
     });

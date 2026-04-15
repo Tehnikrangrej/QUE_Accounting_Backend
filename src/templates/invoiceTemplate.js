@@ -60,7 +60,7 @@ body{
 
 .meta{
   display:grid;
-  grid-template-columns:repeat(3,1fr);
+  grid-template-columns:repeat(4,1fr); /* ✅ UPDATED */
   background:#f3f3f3;
   border:1px solid #cfcfcf;
   margin-bottom:18px;
@@ -180,15 +180,6 @@ tbody td:nth-child(2){
   color:#1f4e79;
 }
 
-/* ================= NOTE ================= */
-
-.note{
-  border:1px solid #cfcfcf;
-  margin-top:12px;
-  padding:10px;
-  background:#f7f7f7;
-}
-
 /* ================= SIGNATURE ================= */
 .signature{
   margin-top:60px;
@@ -257,9 +248,23 @@ tbody td:nth-child(2){
     ${invoice.dueDate ? new Date(invoice.dueDate).toDateString() : "-"}
   </div>
   <div>
+    <strong>Sales Order</strong><br/>
+    ${invoice.salesOrder?.orderNumber || "-"}
+  </div>
+  <div>
     <strong>Terms</strong><br/>
     ${invoice.terms || "-"}
   </div>
+</div>
+
+<!-- ✅ DELIVERY DATE -->
+<div style="margin-bottom:10px;font-size:12px;">
+  <strong>Delivery Date:</strong>
+  ${
+    invoice.salesOrder?.deliveryDate
+      ? new Date(invoice.salesOrder.deliveryDate).toDateString()
+      : "-"
+  }
 </div>
 
 <!-- BILL / SHIP -->

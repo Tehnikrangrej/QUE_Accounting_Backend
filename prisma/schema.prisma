@@ -296,6 +296,9 @@ model Customer {
     pdfUrl                String?
     business Business @relation(fields: [businessId], references: [id])
     customer Customer @relation(fields: [customerId], references: [id])
+    
+    salesOrderId String?
+salesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id])
     items    InvoiceItem[]
 
     @@unique([businessId, invoiceNumber]) // invoice numbers unique per business
@@ -1080,6 +1083,7 @@ model SalesOrder {
   updatedAt     DateTime @updatedAt
 
   @@index([businessId])
+  invoices Invoice[]
 }
 
 model SalesOrderItem {
