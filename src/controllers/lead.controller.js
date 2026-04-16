@@ -1,16 +1,36 @@
 const prisma = require("../config/prisma");
 
 //////////////////////////////////////////////////////
-// CREATE LEAD
+// CREATE LEAD (FINAL SAFE VERSION)
 //////////////////////////////////////////////////////
 exports.createLead = async (req, res) => {
   try {
-    const data = req.body;
+    const {
+      name,
+      email,
+      phone,
+      company,
+      website,
+      position,
+      city,
+      state,
+      country,
+      zipCode,
+      status,
+      source,
+      assignedTo, // 👈 from frontend
+      tags,
+      leadValue,
+      description,
+      isPublic,
+      contactedToday,
+      defaultLanguage,
+    } = req.body;
 
     //////////////////////////////////////////////////////
     // REQUIRED FIELD
     //////////////////////////////////////////////////////
-    if (!data.name) {
+    if (!name) {
       return res.status(400).json({
         success: false,
         message: "Name is required",
@@ -18,12 +38,14 @@ exports.createLead = async (req, res) => {
     }
 
     //////////////////////////////////////////////////////
-    // ✅ VALIDATE ASSIGNED USER
+    // FIX ASSIGNED USER
     //////////////////////////////////////////////////////
-    if (data.assignedToId) {
+    let assignedToId = null;
+
+    if (assignedTo) {
       const member = await prisma.businessUser.findFirst({
         where: {
-          id: data.assignedToId,
+          id: assignedTo, // 👈 expecting ID
           businessId: req.business.id,
           isActive: true,
         },
@@ -35,6 +57,19 @@ exports.createLead = async (req, res) => {
           message: "Assigned user not part of this business",
         });
       }
+
+      assignedToId = assignedTo;
+    }
+
+    //////////////////////////////////////////////////////
+    // FIX TAGS (string → array)
+    //////////////////////////////////////////////////////
+    let formattedTags = [];
+
+    if (typeof tags === "string") {
+      formattedTags = tags.split(",").map((t) => t.trim());
+    } else if (Array.isArray(tags)) {
+      formattedTags = tags;
     }
 
     //////////////////////////////////////////////////////
@@ -42,8 +77,34 @@ exports.createLead = async (req, res) => {
     //////////////////////////////////////////////////////
     const lead = await prisma.lead.create({
       data: {
-        ...data,
+        name,
+        email,
+        phone,
+        company,
+        website,
+        position,
+        city,
+        state,
+        country,
+        zipCode,
+
+        status,
+        source,
+
+        assignedToId, // ✅ FIXED
+
+        tags: formattedTags,
+        leadValue: Number(leadValue) || 0,
+        description,
+
+        isPublic: Boolean(isPublic),
+        contactedToday: Boolean(contactedToday),
+        defaultLanguage,
+
         businessId: req.business.id,
+      },
+      include: {
+        assignedTo: true,
       },
     });
 
@@ -55,7 +116,10 @@ exports.createLead = async (req, res) => {
 
   } catch (error) {
     console.error("createLead error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
