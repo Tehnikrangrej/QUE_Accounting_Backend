@@ -1,51 +1,45 @@
 const prisma = require("../config/prisma");
+const { validateTimeEntry } = require("../utils/validateTimeEntry");
 
-//////////////////////////////////////////////////////
-// CREATE TIME ENTRY
-//////////////////////////////////////////////////////
 exports.createTimeEntry = async (req, res) => {
   try {
-    const { projectId, taskId, hours, description } = req.body;
+    const { projectId, taskId, hours, businessUserId, employeeId } = req.body;
 
-    if (!projectId || !hours) {
-      return res.status(400).json({
-        success: false,
-        message: "projectId & hours required",
-      });
-    }
+    await validateTimeEntry({
+      projectId,
+      taskId,
+      businessId: req.business.id,
+    });
 
     const entry = await prisma.timeEntry.create({
       data: {
         projectId,
         taskId,
-        description,
         hours: Number(hours),
         businessId: req.business.id,
+        businessUserId,
+        employeeId,
       },
     });
 
     res.json({ success: true, entry });
 
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, message: err.message });
   }
 };
+
 
 //////////////////////////////////////////////////////
 // GET TIME ENTRIES
 //////////////////////////////////////////////////////
 exports.getTimeEntries = async (req, res) => {
-  const data = await prisma.timeEntry.findMany({
+  const entries = await prisma.timeEntry.findMany({
     where: { businessId: req.business.id },
-    include: {
-      project: true,
-      task: true,
-    },
   });
 
-  res.json({ success: true, entries: data });
+  res.json({ success: true, entries });
 };
-
 //////////////////////////////////////////////////////
 // UPDATE TIME ENTRY
 //////////////////////////////////////////////////////

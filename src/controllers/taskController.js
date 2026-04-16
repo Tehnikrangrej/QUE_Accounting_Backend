@@ -1,67 +1,70 @@
 const prisma = require("../config/prisma");
+const { validateAssignments } = require("../utils/validateAssignments");
 
-//////////////////////////////////////////////////////
-// CREATE TASK
-//////////////////////////////////////////////////////
 exports.createTask = async (req, res) => {
   try {
-    const { title, projectId, description, priority } = req.body;
+    const { title, projectId, businessUserIds, employeeIds } = req.body;
 
-    if (!title || !projectId) {
-      return res.status(400).json({
-        success: false,
-        message: "title & projectId required",
-      });
-    }
+    await validateAssignments(businessUserIds, employeeIds, req.business.id);
+
+    const lastTask = await prisma.task.findFirst({
+      where: { projectId },
+      orderBy: { order: "desc" },
+    });
 
     const task = await prisma.task.create({
       data: {
         title,
-        description,
-        priority,
         projectId,
+        order: lastTask ? lastTask.order + 1 : 0,
+        assignees: {
+          create: [
+            ...(businessUserIds || []).map(id => ({ businessUserId: id })),
+            ...(employeeIds || []).map(id => ({ employeeId: id })),
+          ],
+        },
+      },
+      include: {
+        assignees: { include: { businessUser: true, employee: true } },
       },
     });
 
     res.json({ success: true, task });
 
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, message: err.message });
   }
 };
 
-//////////////////////////////////////////////////////
-// GET TASKS
-//////////////////////////////////////////////////////
-exports.getTasks = async (req, res) => {
+exports.getTasksByProject = async (req, res) => {
   const tasks = await prisma.task.findMany({
-    where: {
-      project: {
-        businessId: req.business.id,
-      },
-    },
+    where: { projectId: req.params.projectId },
     include: {
-      project: true,
+      assignees: { include: { businessUser: true, employee: true } },
     },
+    orderBy: { order: "asc" },
   });
 
-  res.json({ success: true, tasks });
+  const kanban = { TODO: [], IN_PROGRESS: [], DONE: [] };
+
+  tasks.forEach(t => kanban[t.status].push(t));
+
+  res.json({ success: true, kanban });
 };
 
-//////////////////////////////////////////////////////
-// UPDATE TASK
-//////////////////////////////////////////////////////
 exports.updateTask = async (req, res) => {
   const { id } = req.params;
 
   const task = await prisma.task.update({
     where: { id },
-    data: req.body,
+    data: {
+      status: req.body.status,
+      order: req.body.order,
+    },
   });
 
   res.json({ success: true, task });
 };
-
 //////////////////////////////////////////////////////
 // DELETE TASK
 //////////////////////////////////////////////////////

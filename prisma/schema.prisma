@@ -116,6 +116,9 @@
     quotations Quotation[]
     salesOrders SalesOrder[]
     purchaseOrders PurchaseOrder[]
+    projectMembers ProjectMember[]
+    taskAssignees TaskAssignee[]
+    timeEntries TimeEntry[]
 }
 
   //////////////////////////////////////////////////////
@@ -531,6 +534,12 @@ model Employee {
   overtimes Overtime[]
 
   loans Loan[]
+
+  projectMembers ProjectMember[]
+
+  taskAssignees TaskAssignee[]
+
+  timeEntries TimeEntry[]
 }
 
 model Payslip {
@@ -1402,18 +1411,29 @@ model Project {
   description String?
   status      ProjectStatus @default(ACTIVE)
 
-  customerId  String?
-  customer    Customer? @relation(fields: [customerId], references: [id])
-
   createdAt   DateTime @default(now())
-
-  tasks       Task[]
 
   business    Business @relation(fields: [businessId], references: [id])
 
+  members     ProjectMember[]
+  tasks       Task[]
   timeEntries TimeEntry[]
 
   invoices Invoice[]
+
+  customers Customer[]
+}
+
+model ProjectMember {
+  id             String @id @default(uuid())
+
+  projectId      String
+  businessUserId String?
+  employeeId     String?
+
+  project        Project      @relation(fields: [projectId], references: [id])
+  businessUser   BusinessUser? @relation(fields: [businessUserId], references: [id])
+  employee       Employee?     @relation(fields: [employeeId], references: [id])
 }
 
 enum ProjectStatus {
@@ -1421,19 +1441,34 @@ enum ProjectStatus {
   COMPLETED
   ON_HOLD
 }
-
 model Task {
   id        String   @id @default(uuid())
   projectId String
 
-  title     String
+  title       String
   description String?
-  status    TaskStatus @default(TODO)
 
-  createdAt DateTime @default(now())
+  status      TaskStatus @default(TODO)
+  order       Int @default(0)
 
-  project   Project @relation(fields: [projectId], references: [id])
+  createdAt   DateTime @default(now())
+
+  project     Project @relation(fields: [projectId], references: [id])
+
+  assignees   TaskAssignee[]
   timeEntries TimeEntry[]
+}
+
+model TaskAssignee {
+  id             String @id @default(uuid())
+
+  taskId         String
+  businessUserId String?
+  employeeId     String?
+
+  task           Task          @relation(fields: [taskId], references: [id])
+  businessUser   BusinessUser? @relation(fields: [businessUserId], references: [id])
+  employee       Employee?     @relation(fields: [employeeId], references: [id])
 }
 
 enum TaskStatus {
@@ -1444,17 +1479,23 @@ enum TaskStatus {
 
 model TimeEntry {
   id         String   @id @default(uuid())
-  businessId String
 
+  businessId String
   projectId  String
   taskId     String?
 
+  businessUserId String?
+  employeeId     String?
+
   description String?
-  hours      Float
+  hours       Float
 
-  date       DateTime @default(now())
+  date        DateTime @default(now())
 
-  project    Project @relation(fields: [projectId], references: [id])
-  task       Task?   @relation(fields: [taskId], references: [id])
-  business   Business @relation(fields: [businessId], references: [id])
+  project     Project @relation(fields: [projectId], references: [id])
+  task        Task?   @relation(fields: [taskId], references: [id])
+  business    Business @relation(fields: [businessId], references: [id])
+
+  businessUser BusinessUser? @relation(fields: [businessUserId], references: [id])
+  employee     Employee?     @relation(fields: [employeeId], references: [id])
 }
