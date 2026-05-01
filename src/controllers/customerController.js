@@ -7,6 +7,8 @@ exports.createCustomer = async (req, res) => {
   try {
     const {
       company,
+      region, // 🔥 IMPORTANT
+
       vatNumber,
       phone,
       website,
@@ -34,7 +36,7 @@ exports.createCustomer = async (req, res) => {
     } = req.body;
 
     //////////////////////////////////////////////////////
-    // REQUIRED FIELD
+    // VALIDATION
     //////////////////////////////////////////////////////
     if (!company) {
       return res.status(400).json({
@@ -43,11 +45,23 @@ exports.createCustomer = async (req, res) => {
       });
     }
 
+    if (!region || !["INDIA", "UAE"].includes(region)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid region is required (INDIA / UAE)",
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // CREATE
+    //////////////////////////////////////////////////////
     const customer = await prisma.customer.create({
       data: {
         businessId: req.business.id,
 
         company,
+        region, // 🔥 SAVE REGION
+
         vatNumber,
         phone,
         website,
@@ -117,18 +131,67 @@ exports.getCustomers = async (req, res) => {
 };
 
 //////////////////////////////////////////////////////
+// GET SINGLE CUSTOMER
+//////////////////////////////////////////////////////
+exports.getCustomerById = async (req, res) => {
+  try {
+    const customer = await prisma.customer.findFirst({
+      where: {
+        id: req.params.id,
+        businessId: req.business.id,
+      },
+    });
+
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      customer,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+//////////////////////////////////////////////////////
 // UPDATE CUSTOMER
 //////////////////////////////////////////////////////
 exports.updateCustomer = async (req, res) => {
   try {
     const { id } = req.params;
+    const { region, ...rest } = req.body;
 
+    //////////////////////////////////////////////////////
+    // REGION VALIDATION
+    //////////////////////////////////////////////////////
+    if (region && !["INDIA", "UAE"].includes(region)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid region (INDIA / UAE only)",
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // UPDATE
+    //////////////////////////////////////////////////////
     const updated = await prisma.customer.updateMany({
       where: {
         id,
         businessId: req.business.id,
       },
-      data: req.body,
+      data: {
+        ...rest,
+        ...(region && { region }),
+      },
     });
 
     if (updated.count === 0) {
@@ -144,6 +207,7 @@ exports.updateCustomer = async (req, res) => {
     });
 
   } catch (error) {
+    console.error("updateCustomer error:", error);
     res.status(500).json({
       success: false,
       message: error.message,
@@ -178,6 +242,7 @@ exports.deleteCustomer = async (req, res) => {
     });
 
   } catch (error) {
+    console.error("deleteCustomer error:", error);
     res.status(500).json({
       success: false,
       message: error.message,

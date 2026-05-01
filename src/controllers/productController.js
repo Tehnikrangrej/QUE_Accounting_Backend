@@ -11,17 +11,33 @@ exports.createProduct = async (req, res) => {
       sku,
       price,
       costPrice,
-      taxPercent = 0,
+
+      type,      // 🔥 NEW (GOODS / SERVICE)
+      taxCode,   // 🔥 NEW (HSN / SAC)
+
       unit = "pcs",
     } = req.body;
 
-    if (!name || !sku || !price) {
+    //////////////////////////////////////////////////////
+    // VALIDATION
+    //////////////////////////////////////////////////////
+    if (!name || !sku || !price || !type) {
       return res.status(400).json({
         success: false,
-        message: "name, sku and price are required",
+        message: "name, sku, price and type are required",
       });
     }
 
+    if (!["GOODS", "SERVICE"].includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid type (GOODS / SERVICE)",
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // CREATE
+    //////////////////////////////////////////////////////
     const product = await prisma.product.create({
       data: {
         businessId: req.business.id,
@@ -30,7 +46,10 @@ exports.createProduct = async (req, res) => {
         sku,
         price: Number(price),
         costPrice: Number(costPrice || 0),
-        taxPercent: Number(taxPercent),
+
+        type,        // 🔥 SAVE
+        taxCode,     // 🔥 SAVE
+
         unit,
       },
     });
@@ -73,18 +92,67 @@ exports.getProducts = async (req, res) => {
 };
 
 //////////////////////////////////////////////////////
+// GET SINGLE PRODUCT
+//////////////////////////////////////////////////////
+exports.getProductById = async (req, res) => {
+  try {
+    const product = await prisma.product.findFirst({
+      where: {
+        id: req.params.id,
+        businessId: req.business.id,
+      },
+    });
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      product,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+//////////////////////////////////////////////////////
 // UPDATE PRODUCT
 //////////////////////////////////////////////////////
 exports.updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
+    const { type, ...rest } = req.body;
 
+    //////////////////////////////////////////////////////
+    // VALIDATE TYPE
+    //////////////////////////////////////////////////////
+    if (type && !["GOODS", "SERVICE"].includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid type",
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // UPDATE
+    //////////////////////////////////////////////////////
     const updated = await prisma.product.updateMany({
       where: {
         id,
         businessId: req.business.id,
       },
-      data: req.body,
+      data: {
+        ...rest,
+        ...(type && { type }),
+      },
     });
 
     if (updated.count === 0) {
@@ -100,6 +168,7 @@ exports.updateProduct = async (req, res) => {
     });
 
   } catch (error) {
+    console.error("updateProduct error:", error);
     res.status(500).json({
       success: false,
       message: error.message,
@@ -134,6 +203,7 @@ exports.deleteProduct = async (req, res) => {
     });
 
   } catch (error) {
+    console.error("deleteProduct error:", error);
     res.status(500).json({
       success: false,
       message: error.message,

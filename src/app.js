@@ -43,6 +43,7 @@ const reportRoutes = require("./routes/reportRoutes");
 const projectRoutes = require("./routes/projectRoutes");
 const taskRoutes = require("./routes/taskRoutes");
 const timesRoutes = require("./routes/timesRoutes");
+const invoiceMetaRoutes = require("./routes/invoiceMeta.routes");
 const app = express();
 
 app.use(cors());
@@ -89,6 +90,7 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/projects", projectRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/time-entries", timesRoutes);
+app.use("/api/invoice-meta", invoiceMetaRoutes);
 
 app.get("/", (req, res) => {
   res.send("QUE Accounting Backend Running...");
