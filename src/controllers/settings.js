@@ -33,37 +33,33 @@ exports.saveSettings = async (req, res) => {
     const businessId = req.business.id;
     const data = { ...req.body };
 
-    //////////////////////////////////////////////////////
-    // 🔥 CURRENCY VALIDATION (NEW)
-    //////////////////////////////////////////////////////
-    const allowedCurrencies = ["INR", "USD", "AED", "EUR"];
-
-    if (data.currency && !allowedCurrencies.includes(data.currency)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid currency"
-      });
-    }
-
+    // 🔥 SUPPORT ALL GLOBAL CURRENCIES
     const currencyMap = {
       INR: "₹",
       USD: "$",
-      AED: "د.إ",
-      EUR: "€"
+      AED: "AED",
+      EUR: "€",
+      GBP: "£",
+      CAD: "C$",
+      AUD: "A$",
+      JPY: "¥",
+      CNY: "¥",
+      SAR: "SR",
+      QAR: "QR",
     };
 
-    // Auto assign symbol if not provided
+    // Auto assign symbol or use the code itself if unknown
     if (data.currency && !data.currencySymbol) {
-      data.currencySymbol = currencyMap[data.currency] || "₹";
+      data.currencySymbol = currencyMap[data.currency] || data.currency;
     }
 
-    // Default values if nothing sent
+    // Default to AED if nothing sent
     if (!data.currency) {
-      data.currency = "INR";
+      data.currency = "AED";
     }
 
     if (!data.currencySymbol) {
-      data.currencySymbol = currencyMap[data.currency] || "₹";
+      data.currencySymbol = currencyMap[data.currency] || data.currency;
     }
 
     //////////////////////////////////////////////////////
@@ -137,39 +133,29 @@ exports.saveSettings = async (req, res) => {
       where: { businessId },
     });
 
-    let settings;
-
-    //////////////////////////////////////////////////////
-    // CREATE SETTINGS
-    //////////////////////////////////////////////////////
-    if (!existingSettings) {
-
-      settings = await prisma.settings.create({
-        data: {
-          businessId,
-          ...data,
-        },
-      });
-
-      return successResponse(
-        res,
-        settings,
-        "Settings created successfully"
-      );
-    }
-
-    //////////////////////////////////////////////////////
-    // UPDATE SETTINGS
-    //////////////////////////////////////////////////////
-    settings = await prisma.settings.update({
+    // Use upsert to handle both create and update
+    const updatedSettings = await prisma.settings.upsert({
       where: { businessId },
-      data,
+      update: data,
+      create: { ...data, businessId },
     });
+
+    // 🔥 AUTO-SYNC INVOICES IN BACKGROUND
+    // We don't 'await' this so the user doesn't have to wait for the response
+    try {
+      const { bulkUpdateInvoices } = require("./invoiceController");
+      // Create mock req/res for the controller function
+      const mockReq = { business: { id: businessId } };
+      const mockRes = { json: () => {}, status: () => ({ json: () => {} }) };
+      bulkUpdateInvoices(mockReq, mockRes).catch(err => console.error("Background auto-sync failed:", err));
+    } catch (e) {
+      console.error("Could not trigger auto-sync:", e);
+    }
 
     return successResponse(
       res,
-      settings,
-      "Settings updated successfully"
+      updatedSettings,
+      "Settings saved and invoices syncing in background"
     );
 
   } catch (error) {

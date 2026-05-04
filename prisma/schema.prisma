@@ -318,6 +318,7 @@ enum Region {
     customer Customer @relation(fields: [customerId], references: [id])
     
     salesOrderId String?
+    designTemplate String @default("modern")
 salesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id])
     items    InvoiceItem[]
 
