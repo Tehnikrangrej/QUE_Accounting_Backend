@@ -298,6 +298,8 @@ enum Region {
     currency      String        @default("AED")
     poNumber      String?
     poDate        DateTime?
+    soNumber      String?
+    soDate        DateTime?
 
     //NOTE//
     adminNote String?
@@ -1102,9 +1104,12 @@ model QuotationItem {
   quotationId  String
   quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
-  name         String
-  quantity     Int
+  description  String
+  itemType     String?  @default("GOODS")
+  hsnSacCode   String?
+  quantity     Float
   price        Float
+  taxPercent   Float?   @default(0)
   total        Float
 }
 
@@ -1172,9 +1177,12 @@ model SalesOrderItem {
   salesOrderId String
   salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
 
-  name         String
-  quantity     Int
+  description  String
+  itemType     String?  @default("GOODS")
+  hsnSacCode   String?
+  quantity     Float
   price        Float
+  taxPercent   Float?   @default(0)
   total        Float
 }
 
@@ -1236,9 +1244,12 @@ model PurchaseOrderItem {
   purchaseOrderId  String
   purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
-  name             String
+  description      String
+  itemType         String?
+  hsnSacCode       String?
   quantity         Int
   price            Float
+  taxPercent       Float?   @default(0)
   total            Float
 }
 

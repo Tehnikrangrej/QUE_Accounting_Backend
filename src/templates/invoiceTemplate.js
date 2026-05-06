@@ -101,7 +101,7 @@ module.exports = (invoice, settings = {}) => {
   /* MODERN DESIGN */
   .design-modern .header { display:grid; grid-template-columns: 1fr 1.2fr 1fr; align-items:start; border-bottom:1px solid #eee; padding-bottom:15px; margin-bottom:15px; }
   .design-modern .invoice-title { color:#1f4e79; font-size:24px; font-weight:900; }
-  .design-modern .info-grid { display:grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background:#ddd; border:1px solid #ddd; margin-bottom:15px; }
+  .design-modern .info-grid { display:grid; grid-template-columns: repeat(5, 1fr); gap: 1px; background:#ddd; border:1px solid #ddd; margin-bottom:15px; }
   .design-modern .info-box { background:#f8f9fa; padding:8px; }
   .design-modern .info-box label { display:block; color:#222; font-weight:bold; margin-bottom:4px; font-size:9px; }
   .design-modern .address-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom:15px; }
@@ -156,7 +156,8 @@ module.exports = (invoice, settings = {}) => {
       <div class="info-grid">
         <div class="info-box"><label>Date</label>${new Date(invoice.invoiceDate).toDateString()}</div>
         <div class="info-box"><label>Due</label>${invoice.dueDate ? new Date(invoice.dueDate).toDateString() : '-'}</div>
-        <div class="info-box"><label>SO</label>${invoice.poNumber || '-'}</div>
+        <div class="info-box"><label>SO</label>${invoice.soNumber || '-'}</div>
+        <div class="info-box"><label>PO</label>${invoice.poNumber || '-'}</div>
         <div class="info-box"><label>Terms</label>${invoice.terms || 'Payment due within 30 days'}</div>
       </div>
 

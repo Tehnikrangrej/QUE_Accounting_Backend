@@ -109,8 +109,11 @@ exports.createPurchaseOrder = async (req, res) => {
         items: {
           create: items.map((item) => ({
             name: item.name,
+            type: item.type || null,
+            hsn: item.hsn || null,
             quantity: item.quantity,
             price: item.price,
+            taxPercent: Number(item.taxPercent || 0),
             total: item.quantity * item.price,
           })),
         },

@@ -61,12 +61,28 @@ exports.createQuotation = async (req, res) => {
     //////////////////////////////////////////////////////
     // CALCULATE TOTAL
     //////////////////////////////////////////////////////
-    const subtotal = items.reduce(
-      (sum, item) => sum + item.quantity * item.price,
-      0
-    );
+    let calculatedSubtotal = 0
+    let totalTaxAmount = 0
 
-    const totalAmount = subtotal + tax - discount;
+    const mappedItems = items.map((item) => {
+      const lineAmount = Number(item.quantity || 0) * Number(item.price || 0)
+      const lineTax = (lineAmount * Number(item.taxPercent || 0)) / 100
+      
+      calculatedSubtotal += lineAmount
+      totalTaxAmount += lineTax
+
+      return {
+        name: item.name,
+        type: item.type || 'GOODS',
+        hsn: item.hsn,
+        quantity: Number(item.quantity || 0),
+        price: Number(item.price || 0),
+        taxPercent: Number(item.taxPercent || 0),
+        total: lineAmount + lineTax,
+      }
+    })
+
+    const finalGrandTotal = calculatedSubtotal + totalTaxAmount - Number(discount || 0)
 
     //////////////////////////////////////////////////////
     // CREATE
@@ -81,10 +97,10 @@ exports.createQuotation = async (req, res) => {
         dealId,
         assignedToId,
 
-        subtotal,
-        tax,
-        discount,
-        totalAmount,
+        subtotal: calculatedSubtotal,
+        tax: totalTaxAmount,
+        discount: Number(discount || 0),
+        totalAmount: finalGrandTotal,
 
         issueDate: new Date(issueDate),
         expiryDate: expiryDate ? new Date(expiryDate) : null,
@@ -92,12 +108,7 @@ exports.createQuotation = async (req, res) => {
         notes,
 
         items: {
-          create: items.map((item) => ({
-            name: item.name,
-            quantity: item.quantity,
-            price: item.price,
-            total: item.quantity * item.price,
-          })),
+          create: mappedItems,
         },
       },
       include: {

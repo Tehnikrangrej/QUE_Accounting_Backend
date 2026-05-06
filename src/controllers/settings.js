@@ -12,6 +12,23 @@ exports.getSettings = async (req, res) => {
       where: { businessId },
     });
 
+    if (settings) {
+      // Ensure LWP is always in the response
+      let leaveTypes = settings.leaveTypes || [];
+      if (typeof leaveTypes === "string") leaveTypes = JSON.parse(leaveTypes);
+      
+      const hasLwp = leaveTypes.some(l => l.code === "LWP");
+      if (!hasLwp) {
+        leaveTypes.push({
+          code: "LWP",
+          name: "Unpaid Leave",
+          yearlyLimit: null,
+          system: true
+        });
+        settings.leaveTypes = leaveTypes;
+      }
+    }
+
     return successResponse(
       res,
       settings,
@@ -125,6 +142,11 @@ exports.saveSettings = async (req, res) => {
     });
 
     data.leaveTypes = leaveTypes;
+
+    // 🔥 Fix: Ensure overtimeThreshold is a number (Float in Prisma)
+    if (data.overtimeThreshold !== undefined) {
+      data.overtimeThreshold = parseFloat(data.overtimeThreshold) || 0;
+    }
 
     //////////////////////////////////////////////////////
     // CHECK EXISTING SETTINGS
