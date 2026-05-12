@@ -2,11 +2,10 @@ const router = require("express").Router();
 const auth = require("../middlewares/authMiddleware");
 const business = require("../middlewares/business.middleware");
 const checkPermission = require("../middlewares/checkPermission");
-const controller = require ("../controllers/paymentController");
-
+const controller = require("../controllers/paymentController");
 
 //////////////////////////////////////////////////
-// CREATE PAYMENT
+// CREATE PAYMENT (INVOICE - OLD)
 //////////////////////////////////////////////////
 router.post(
   "/:invoiceId",
@@ -16,6 +15,20 @@ router.post(
   controller.createPayment
 );
 
+//////////////////////////////////////////////////
+// 🔥 CREATE PAYMENT (BILL - NEW)
+//////////////////////////////////////////////////
+router.post(
+  "/bill/:billId",
+  auth,
+  business,
+  checkPermission("payment", "create"),
+  controller.createPayment
+);
+
+//////////////////////////////////////////////////
+// GET ALL PAYMENTS
+//////////////////////////////////////////////////
 router.get(
   "/",
   auth,
@@ -23,19 +36,24 @@ router.get(
   checkPermission("payment", "read"),
   controller.getPayments
 );
+
 //////////////////////////////////////////////////
-// READ PAYMENTS
+// READ PAYMENTS BY INVOICE
 //////////////////////////////////////////////////
 router.get(
-  "/:invoiceId",
+  "/invoice/:invoiceId",   // ✅ FIXED (no conflict)
   auth,
   business,
   checkPermission("payment", "read"),
   controller.getInvoicePayments
 );
 
+
+//////////////////////////////////////////////////
+// DOWNLOAD PAYMENT PDF
+//////////////////////////////////////////////////
 router.get(
-  "/:paymentId/download",
+  "/download/:paymentId",   // ✅ FIXED (no conflict)
   auth,
   business,
   checkPermission("payment", "read"),

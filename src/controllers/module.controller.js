@@ -174,10 +174,27 @@ exports.deleteModule = async (req, res) => {
   try {
     const { id } = req.params;
 
+    // 1. Get all permission IDs for this module
+    const permissions = await prisma.permission.findMany({
+      where: { moduleId: id },
+      select: { id: true }
+    });
+    const permissionIds = permissions.map(p => p.id);
+
+    // 2. Delete RolePermissions and UserPermissions first to avoid FK errors
+    await prisma.rolePermission.deleteMany({
+      where: { permissionId: { in: permissionIds } }
+    });
+    await prisma.userPermission.deleteMany({
+      where: { permissionId: { in: permissionIds } }
+    });
+
+    // 3. Now delete the Permissions
     await prisma.permission.deleteMany({
       where: { moduleId: id },
     });
 
+    // 4. Finally delete the Module
     await prisma.module.delete({
       where: { id },
     });

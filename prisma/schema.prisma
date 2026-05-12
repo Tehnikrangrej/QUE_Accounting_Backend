@@ -74,6 +74,20 @@
     contracts Contract[]
     contractTypes ContractType[]
     leads Lead[]
+    deals Deal[]
+    activities Activity[]
+    quotations Quotation[]
+    salesOrders SalesOrder[]
+    bills Bill[]
+    purchaseOrders PurchaseOrder[]
+    vendors Vendor[]
+    warehouses Warehouse[]
+    products Product[]
+    journalEntries JournalEntry[]
+    accounts Account[]
+    
+    timeEntries TimeEntry[]
+    projects Project[]
 }
 
   //////////////////////////////////////////////////////
@@ -96,7 +110,16 @@
     @@unique([userId, businessId]) // prevents duplicate membership
     @@index([businessId])
     @@map("business_users")
-  }
+      deals Deal[]
+    leads Lead[]
+    activities Activity[]
+    quotations Quotation[]
+    salesOrders SalesOrder[]
+    purchaseOrders PurchaseOrder[]
+    projectMembers ProjectMember[]
+    taskAssignees TaskAssignee[]
+    timeEntries TimeEntry[]
+}
 
   //////////////////////////////////////////////////////
   // ROLES (Business Scoped)
@@ -228,6 +251,7 @@ model Customer {
   shippingState   String?
   shippingZipCode String?
   shippingCountry String?
+    region     Region   // 🔥 ADD THIS
 
   //////////////////////////////////////////////////////
   // STATUS + META
@@ -248,6 +272,15 @@ model Customer {
   creditNotes CreditNote[]
   customerContacts CustomerContact[]
   contracts Contract[]
+  deals Deal[]
+  activities Activity[]
+  quotations Quotation[]
+  salesOrders SalesOrder[]
+  projects Project[]
+}
+enum Region {
+  INDIA
+  UAE
 }
 
   //////////////////////////////////////////////////////
@@ -265,6 +298,8 @@ model Customer {
     currency      String        @default("AED")
     poNumber      String?
     poDate        DateTime?
+    soNumber      String?
+    soDate        DateTime?
 
     //NOTE//
     adminNote String?
@@ -283,7 +318,14 @@ model Customer {
     pdfUrl                String?
     business Business @relation(fields: [businessId], references: [id])
     customer Customer @relation(fields: [customerId], references: [id])
+    
+    salesOrderId String?
+    designTemplate String @default("modern")
+salesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id])
     items    InvoiceItem[]
+
+    projectId String?
+project   Project? @relation(fields: [projectId], references: [id])
 
     @@unique([businessId, invoiceNumber]) // invoice numbers unique per business
     @@index([businessId])
@@ -304,11 +346,15 @@ model Customer {
     id          String  @id @default(uuid())
     invoiceId   String
     description String
+    hsnSacCode  String?
+    itemType    String?
     hours Float
     rate Float
-    taxPercent Float @default(0)
-    taxAmount Float @default(0)
-    amount  Float // hours * rate (without tax)
+    taxDetails  Json?
+     // 🔥 ADD THESE (IMPORTANT)
+  totalTax    Float   @default(0)
+  totalAmount Float   @default(0)
+    amount  Float 
     createdAt   DateTime @default(now())
     invoice Invoice @relation(fields: [invoiceId], references: [id])
 
@@ -390,13 +436,14 @@ model Payment {
   //////////////////////////////////////////////////////
   // RELATIONS
   //////////////////////////////////////////////////////
-  invoiceId     String
+
   businessId    String
   paymentNumber String      // ⭐ ADD THIS
-
-  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId String?
+invoice   Invoice? @relation(fields: [invoiceId], references: [id])
   business      Business @relation(fields: [businessId], references: [id])
-
+   billId        String?
+  bill          Bill? @relation(fields: [billId], references: [id])
   //////////////////////////////////////////////////////
   // PAYMENT DETAILS
   //////////////////////////////////////////////////////
@@ -429,17 +476,19 @@ model CreditNote {
   // RELATIONS
   ////////////////////////////////////////////////////
   businessId       String
-  customerId       String
+  customerId       String?
   invoiceId        String?   // nullable (credit may exist without invoice)
-
+  vendorId         String?   // for bill credits
   business Business @relation(fields: [businessId], references: [id])
-  customer Customer @relation(fields: [customerId], references: [id])
+ customer Customer? @relation(fields: [customerId], references: [id])
   invoice  Invoice? @relation(fields: [invoiceId], references: [id])
+  vendor   Vendor? @relation(fields: [vendorId], references: [id])
 
   ////////////////////////////////////////////////////
   // CREDIT DATA
   ////////////////////////////////////////////////////
   creditNumber     String
+  type             CreditNoteType   // 🔥 ADD THIS
   amount           Float
   remainingAmount  Float
 
@@ -458,6 +507,10 @@ model CreditNote {
 enum CreditNoteStatus {
  OPEN
  CLOSED
+}
+enum CreditNoteType {
+  INVOICE
+  BILL
 }
 
 model Employee {
@@ -493,6 +546,12 @@ model Employee {
   overtimes Overtime[]
 
   loans Loan[]
+
+  projectMembers ProjectMember[]
+
+  taskAssignees TaskAssignee[]
+
+  timeEntries TimeEntry[]
 }
 
 model Payslip {
@@ -625,15 +684,54 @@ model Expense {
 
 model Vendor {
   id         String   @id @default(uuid())
-  businessId String
 
+  //////////////////////////////////////////////////////
+  // BUSINESS
+  //////////////////////////////////////////////////////
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // BASIC INFO
+  //////////////////////////////////////////////////////
   name       String
   email      String?
   phone      String?
 
-  createdAt  DateTime @default(now())
+  //////////////////////////////////////////////////////
+  // COMPANY DETAILS
+  //////////////////////////////////////////////////////
+  vatNumber  String?
+  website    String?
 
-  expenses   Expense[]
+  //////////////////////////////////////////////////////
+  // ADDRESS
+  //////////////////////////////////////////////////////
+  address    String?
+  city       String?
+  state      String?
+  zipCode    String?
+  country    String?
+
+  //////////////////////////////////////////////////////
+  // STATUS
+  //////////////////////////////////////////////////////
+  isActive   Boolean  @default(true)
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+  expenses        Expense[]
+  purchaseOrders  PurchaseOrder[]   // ✅ NEW
+  bills           Bill[]            // ✅ FUTURE
+
+  //////////////////////////////////////////////////////
+  // META
+  //////////////////////////////////////////////////////
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  creditNotes CreditNote[]
 }
 
 model CustomerContact {
@@ -666,6 +764,7 @@ model CustomerContact {
 
   @@index([customerId])
   @@index([businessId])
+  deals Deal[]
 }
 
 model Contract {
@@ -738,7 +837,8 @@ model Lead {
   status          LeadStatus   @default(NEW)
   source          LeadSource
 
-  assignedTo      String?
+   assignedToId String?
+assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
   tags            String[]
   leadValue       Float?
 
@@ -759,6 +859,8 @@ model Lead {
   updatedAt       DateTime @updatedAt
 
   customers Customer[]
+
+  activity Activity[]
 }
 
 model PipelineStage {
@@ -823,4 +925,608 @@ enum LeadSource {
   REFERRAL
   CALL
   OTHER
+}
+
+model Deal {
+  id          String   @id @default(uuid())
+
+  //////////////////////////////////////////////////////
+  // BUSINESS RELATION
+  //////////////////////////////////////////////////////
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  //////////////////////////////////////////////////////
+  // DEAL INFO
+  //////////////////////////////////////////////////////
+  name        String
+  amount      Float
+  currency    String   @default("INR")
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  contactId   String?
+  contact     CustomerContact? @relation(fields: [contactId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // PIPELINE
+  //////////////////////////////////////////////////////
+  stage       String   @default("New")
+  probability Int?
+
+  //////////////////////////////////////////////////////
+  // DATES
+  //////////////////////////////////////////////////////
+  expectedCloseDate DateTime?
+
+  //////////////////////////////////////////////////////
+  // META
+  //////////////////////////////////////////////////////
+  assignedToId String?
+assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
+  source     String?
+  description String?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([customerId])
+  activities Activity[]
+  quotations Quotation[]
+  salesOrders SalesOrder[]
+}
+
+model Activity {
+  id          String   @id @default(uuid())
+
+  //////////////////////////////////////////////////////
+  // BUSINESS
+  //////////////////////////////////////////////////////
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  //////////////////////////////////////////////////////
+  // BASIC INFO
+  //////////////////////////////////////////////////////
+  type        String   // Call, Meeting
+  title       String
+  description String?
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+  leadId      String?
+  lead        Lead? @relation(fields: [leadId], references: [id])
+
+  dealId      String?
+  deal        Deal? @relation(fields: [dealId], references: [id])
+
+  customerId  String?
+  customer    Customer? @relation(fields: [customerId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // ASSIGNED USER (BusinessUser)
+  //////////////////////////////////////////////////////
+  assignedToId String?
+  assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // DATE
+  //////////////////////////////////////////////////////
+  activityDate DateTime
+  duration     Int?
+
+  //////////////////////////////////////////////////////
+  // STATUS
+  //////////////////////////////////////////////////////
+  status       String   @default("Scheduled")
+
+  //////////////////////////////////////////////////////
+  // META
+  //////////////////////////////////////////////////////
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([businessId])
+}
+
+model Quotation {
+  id            String   @id @default(uuid())
+
+  //////////////////////////////////////////////////////
+  // BUSINESS
+  //////////////////////////////////////////////////////
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  //////////////////////////////////////////////////////
+  // BASIC INFO
+  //////////////////////////////////////////////////////
+  quoteNumber   String   @unique
+  title         String?
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id])
+
+  dealId        String?
+  deal          Deal? @relation(fields: [dealId], references: [id])
+
+  assignedToId  String?
+  assignedTo    BusinessUser? @relation(fields: [assignedToId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // STATUS
+  //////////////////////////////////////////////////////
+  status        String   @default("Draft")
+
+  //////////////////////////////////////////////////////
+  // PRICING
+  //////////////////////////////////////////////////////
+  subtotal      Float
+  tax           Float?
+  discount      Float?
+  totalAmount   Float
+
+  //////////////////////////////////////////////////////
+  // DATES
+  //////////////////////////////////////////////////////
+  issueDate     DateTime
+  expiryDate    DateTime?
+
+  //////////////////////////////////////////////////////
+  // NOTES
+  //////////////////////////////////////////////////////
+  notes         String?
+
+  //////////////////////////////////////////////////////
+  // RELATION
+  //////////////////////////////////////////////////////
+  items         QuotationItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([businessId])
+  salesOrders SalesOrder[]
+}
+
+model QuotationItem {
+  id           String   @id @default(uuid())
+
+  quotationId  String
+  quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  description  String
+  itemType     String?  @default("GOODS")
+  hsnSacCode   String?
+  quantity     Float
+  price        Float
+  taxPercent   Float?   @default(0)
+  total        Float
+}
+
+model SalesOrder {
+  id            String   @id @default(uuid())
+
+  //////////////////////////////////////////////////////
+  // BUSINESS
+  //////////////////////////////////////////////////////
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  //////////////////////////////////////////////////////
+  // BASIC
+  //////////////////////////////////////////////////////
+  orderNumber   String   @unique
+  status        String   @default("Draft")
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id])
+
+  quotationId   String?
+  quotation     Quotation? @relation(fields: [quotationId], references: [id])
+
+  dealId        String?
+  deal          Deal? @relation(fields: [dealId], references: [id])
+
+  assignedToId  String?
+  assignedTo    BusinessUser? @relation(fields: [assignedToId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // PRICING
+  //////////////////////////////////////////////////////
+  subtotal      Float
+  tax           Float?
+  discount      Float?
+  totalAmount   Float
+
+  //////////////////////////////////////////////////////
+  // DATES
+  //////////////////////////////////////////////////////
+  orderDate     DateTime
+  deliveryDate  DateTime?
+
+  //////////////////////////////////////////////////////
+  // NOTES
+  //////////////////////////////////////////////////////
+  notes         String?
+
+  items         SalesOrderItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([businessId])
+  invoices Invoice[]
+}
+
+model SalesOrderItem {
+  id           String   @id @default(uuid())
+
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+
+  description  String
+  itemType     String?  @default("GOODS")
+  hsnSacCode   String?
+  quantity     Float
+  price        Float
+  taxPercent   Float?   @default(0)
+  total        Float
+}
+
+model PurchaseOrder {
+  id            String   @id @default(uuid())
+
+  //////////////////////////////////////////////////////
+  // BUSINESS
+  //////////////////////////////////////////////////////
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  //////////////////////////////////////////////////////
+  // BASIC
+  //////////////////////////////////////////////////////
+  poNumber      String   @unique
+  status        String   @default("Draft")
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+  vendorId      String
+  vendor        Vendor @relation(fields: [vendorId], references: [id])
+
+  assignedToId  String?
+  assignedTo    BusinessUser? @relation(fields: [assignedToId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // PRICING
+  //////////////////////////////////////////////////////
+  subtotal      Float
+  tax           Float?
+  discount      Float?
+  totalAmount   Float
+
+  //////////////////////////////////////////////////////
+  // DATES
+  //////////////////////////////////////////////////////
+  orderDate     DateTime
+  expectedDeliveryDate DateTime?
+
+  //////////////////////////////////////////////////////
+  // NOTES
+  //////////////////////////////////////////////////////
+  notes         String?
+
+  items         PurchaseOrderItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([businessId])
+  bills Bill[]
+}
+
+model PurchaseOrderItem {
+  id               String   @id @default(uuid())
+
+  purchaseOrderId  String
+  purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  description      String
+  itemType         String?
+  hsnSacCode       String?
+  quantity         Int
+  price            Float
+  taxPercent       Float?   @default(0)
+  total            Float
+}
+
+model Bill {
+  id            String   @id @default(uuid())
+
+  //////////////////////////////////////////////////////
+  // BUSINESS
+  //////////////////////////////////////////////////////
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // BASIC
+  //////////////////////////////////////////////////////
+  billNumber    String
+  status        BillStatus @default(UNPAID)
+
+  //////////////////////////////////////////////////////
+  // RELATIONS
+  //////////////////////////////////////////////////////
+  vendorId      String
+  vendor        Vendor @relation(fields: [vendorId], references: [id])
+
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+
+  //////////////////////////////////////////////////////
+  // PRICING
+  //////////////////////////////////////////////////////
+  subtotal      Float
+  tax           Float?
+  discount      Float?
+  totalAmount   Float
+
+  //////////////////////////////////////////////////////
+  // DATES
+  //////////////////////////////////////////////////////
+  billDate      DateTime
+  dueDate       DateTime?
+
+  //////////////////////////////////////////////////////
+  // NOTES
+  //////////////////////////////////////////////////////
+  notes         String?
+
+  items         BillItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([businessId, billNumber])
+  @@index([businessId])
+  payments Payment[]
+}
+model BillItem {
+  id        String   @id @default(uuid())
+
+  billId    String
+  bill      Bill @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  name      String
+  quantity  Int
+  price     Float
+  total     Float
+}
+
+enum BillStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  businessId  String
+
+  name        String
+  description String?
+  sku         String   @unique
+
+  price       Float
+  costPrice   Float
+
+    // 🔥 ADD THIS
+  type        ItemType
+  taxCode     String?   // HSN or SAC
+  taxPercent  Float    @default(0)
+
+  unit        String   @default("pcs")
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stock       Stock[]
+
+  business    Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId])
+}
+
+enum ItemType {
+  GOODS
+  SERVICE
+}
+
+
+model Warehouse {
+  id         String   @id @default(uuid())
+  businessId String
+
+  name       String
+  address    String?
+  city       String?
+  country    String?
+
+  isActive   Boolean  @default(true)
+
+  createdAt  DateTime @default(now())
+
+  stock      Stock[]
+
+  business   Business @relation(fields: [businessId], references: [id])
+}
+
+model Stock {
+  id          String   @id @default(uuid())
+
+  productId   String
+  warehouseId String
+
+  quantity    Float    @default(0)
+  reservedQty Float    @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product     Product   @relation(fields: [productId], references: [id])
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  @@unique([productId, warehouseId])
+}
+
+model Account {
+  id         String   @id @default(uuid())
+  businessId String
+
+  name       String
+  type       AccountType
+  code       String?
+  isActive   Boolean  @default(true)
+
+  createdAt  DateTime @default(now())
+
+  business   Business @relation(fields: [businessId], references: [id])
+  entries    JournalEntry[]
+}
+
+model JournalEntry {
+  id          String   @id @default(uuid())
+  businessId  String
+
+  accountId   String
+  debit       Float    @default(0)
+  credit      Float    @default(0)
+
+  description String?
+  date        DateTime @default(now())
+
+  account     Account  @relation(fields: [accountId], references: [id])
+  business    Business @relation(fields: [businessId], references: [id])
+}
+
+
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  INCOME
+  EXPENSE
+  EQUITY
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  businessId  String
+
+  name        String
+  description String?
+  status      ProjectStatus @default(ACTIVE)
+
+  createdAt   DateTime @default(now())
+
+  business    Business @relation(fields: [businessId], references: [id])
+
+  members     ProjectMember[]
+  tasks       Task[]
+  timeEntries TimeEntry[]
+
+  invoices Invoice[]
+
+  customers Customer[]
+}
+
+model ProjectMember {
+  id             String @id @default(uuid())
+
+  projectId      String
+  businessUserId String?
+  employeeId     String?
+
+  project        Project      @relation(fields: [projectId], references: [id])
+  businessUser   BusinessUser? @relation(fields: [businessUserId], references: [id])
+  employee       Employee?     @relation(fields: [employeeId], references: [id])
+}
+
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+  ON_HOLD
+}
+model Task {
+  id        String   @id @default(uuid())
+  projectId String
+
+  title       String
+  description String?
+
+  status      TaskStatus @default(TODO)
+  order       Int @default(0)
+
+  createdAt   DateTime @default(now())
+
+  project     Project @relation(fields: [projectId], references: [id])
+
+  assignees   TaskAssignee[]
+  timeEntries TimeEntry[]
+}
+
+model TaskAssignee {
+  id             String @id @default(uuid())
+
+  taskId         String
+  businessUserId String?
+  employeeId     String?
+
+  task           Task          @relation(fields: [taskId], references: [id])
+  businessUser   BusinessUser? @relation(fields: [businessUserId], references: [id])
+  employee       Employee?     @relation(fields: [employeeId], references: [id])
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+model TimeEntry {
+  id         String   @id @default(uuid())
+
+  businessId String
+  projectId  String
+  taskId     String?
+
+  businessUserId String?
+  employeeId     String?
+
+  description String?
+  hours       Float
+
+  date        DateTime @default(now())
+
+  project     Project @relation(fields: [projectId], references: [id])
+  task        Task?   @relation(fields: [taskId], references: [id])
+  business    Business @relation(fields: [businessId], references: [id])
+
+  businessUser BusinessUser? @relation(fields: [businessUserId], references: [id])
+  employee     Employee?     @relation(fields: [employeeId], references: [id])
 }

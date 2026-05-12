@@ -38,18 +38,26 @@ exports.createContract = async (req, res) => {
     }
 
     //////////////////////////////////////////////////////
-    // GET BUSINESS SETTINGS (🔥 NEW)
+    // GET BUSINESS SETTINGS (Auto-create if missing)
     //////////////////////////////////////////////////////
-    const settings = await prisma.settings.findUnique({
+    let settings = await prisma.settings.findUnique({
       where: {
         businessId: req.business.id,
       },
     });
 
     if (!settings) {
-      return res.status(404).json({
-        success: false,
-        message: "Business settings not found",
+      console.log("Settings not found for business, creating defaults...");
+      const business = await prisma.business.findUnique({
+        where: { id: req.business.id }
+      });
+      
+      settings = await prisma.settings.create({
+        data: {
+          businessId: req.business.id,
+          companyName: business?.name || "My Business",
+          currency: "AED", // Default fallback
+        }
       });
     }
 

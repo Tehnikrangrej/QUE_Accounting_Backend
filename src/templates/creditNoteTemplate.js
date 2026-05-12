@@ -1,14 +1,14 @@
 module.exports = (credit, settings) => {
 
-  const customer = credit.customer;
+  //////////////////////////////////////////////////////
+  // SUPPORT BOTH CUSTOMER + VENDOR
+  //////////////////////////////////////////////////////
+  const party = credit.customer || credit.vendor;
+
   const overpaid = Number(credit.amount || 0);
 
-  //////////////////////////////////////////////////////
-  // 🔥 CURRENCY (NEW)
-  //////////////////////////////////////////////////////
   const symbol = settings?.currencySymbol || "₹";
 
-  // 5% weight deduction
   const weight = overpaid * 0.05;
   const subTotal = overpaid - weight;
 
@@ -16,13 +16,10 @@ module.exports = (credit, settings) => {
     .toISOString()
     .split("T")[0];
 
-  //////////////////////////////////////////////////////
-  // SINGLE BLANK ITEM ROW (Qty = 1)
-  //////////////////////////////////////////////////////
   const rows = `
       <tr>
         <td>1</td>
-        <td></td>
+        <td>${credit.type === "BILL" ? "Bill Adjustment" : "Invoice Adjustment"}</td>
         <td>1</td>
         <td>${symbol} ${overpaid.toFixed(2)}</td>
         <td>${symbol} ${overpaid.toFixed(2)}</td>
@@ -31,30 +28,18 @@ module.exports = (credit, settings) => {
 
   return `
 <html>
-<head>
-<style>
-body{font-family:Arial;padding:40px;color:#333;}
-.header{text-align:right;}
-table{width:100%;border-collapse:collapse;margin-top:30px;}
-th{background:#2f3b4c;color:#fff;padding:8px;}
-td{padding:8px;border-bottom:1px solid #ddd;text-align:center;}
-td:nth-child(2){text-align:left;}
-.totals{width:300px;margin-left:auto;margin-top:20px;}
-</style>
-</head>
-
 <body>
 
-<div class="header">
+<div>
 <h2>CREDIT NOTE</h2>
 <div># ${credit.creditNumber}</div>
-<div>Credit Note Date: ${date}</div>
+<div>Date: ${date}</div>
 </div>
 
-<h3>Bill To</h3>
-${customer?.companyName || ""}
+<h3>${credit.type === "BILL" ? "Vendor" : "Customer"}</h3>
+${party?.companyName || party?.name || "N/A"}
 
-<table>
+<table border="1" cellpadding="5" cellspacing="0">
 <thead>
 <tr>
 <th>#</th>
@@ -70,15 +55,11 @@ ${rows}
 </tbody>
 </table>
 
-<div class="totals">
-<div>Total Overpaid: ${symbol} ${overpaid.toFixed(2)}</div>
+<div style="margin-top:20px;">
+<div>Total: ${symbol} ${overpaid.toFixed(2)}</div>
 <div>Weight (5%): ${symbol} ${weight.toFixed(2)}</div>
 <div><b>Sub Total: ${symbol} ${subTotal.toFixed(2)}</b></div>
-<div>Credits Remaining: ${symbol} ${subTotal.toFixed(2)}</div>
 </div>
-
-<br/><br/>
-Authorized Signature ___________________
 
 </body>
 </html>

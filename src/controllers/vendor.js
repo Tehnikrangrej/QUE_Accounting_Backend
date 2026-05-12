@@ -6,112 +6,244 @@ const prisma = require("../config/prisma");
 exports.createVendor = async (req, res) => {
   try {
     const businessId = req.business.id;
-    const { name, email, phone } = req.body;
 
-    if (!name) {
+    const {
+      name,
+      email,
+      phone,
+      vatNumber,
+      website,
+      address,
+      city,
+      state,
+      zipCode,
+      country,
+    } = req.body;
+
+    //////////////////////////////////////////////////////
+    // VALIDATION
+    //////////////////////////////////////////////////////
+    if (!name || name.trim() === "") {
       return res.status(400).json({
         success: false,
-        message: "Vendor name is required"
+        message: "Vendor name is required",
       });
     }
 
+    //////////////////////////////////////////////////////
+    // CREATE
+    //////////////////////////////////////////////////////
     const vendor = await prisma.vendor.create({
-      data: { businessId, name, email, phone }
+      data: {
+        businessId,
+        name,
+        email,
+        phone,
+        vatNumber,
+        website,
+        address,
+        city,
+        state,
+        zipCode,
+        country,
+      },
     });
 
-    res.json({ success: true, data: vendor });
+    res.status(201).json({
+      success: true,
+      data: vendor,
+    });
 
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error("createVendor error:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
 
 //////////////////////////////////////////////////////
-// GET ALL VENDORS
+// GET ALL VENDORS (WITH SEARCH)
 //////////////////////////////////////////////////////
 exports.getVendors = async (req, res) => {
-  const businessId = req.business.id;
+  try {
+    const businessId = req.business.id;
+    const { search = "" } = req.query;
 
-  const vendors = await prisma.vendor.findMany({
-    where: { businessId },
-    orderBy: { createdAt: "desc" }
-  });
+    const vendors = await prisma.vendor.findMany({
+      where: {
+        businessId,
+        name: {
+          contains: search,
+          mode: "insensitive",
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
 
-  res.json({ success: true, data: vendors });
+    res.json({
+      success: true,
+      data: vendors,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
 
 //////////////////////////////////////////////////////
 // GET SINGLE VENDOR
 //////////////////////////////////////////////////////
 exports.getVendor = async (req, res) => {
-  const businessId = req.business.id;
-  const { id } = req.params;
+  try {
+    const businessId = req.business.id;
+    const { id } = req.params;
 
-  const vendor = await prisma.vendor.findFirst({
-    where: { id, businessId },
-    include: { expenses: true }
-  });
+    const vendor = await prisma.vendor.findFirst({
+      where: {
+        id,
+        businessId,
+      },
+      include: {
+        expenses: true,
+        purchaseOrders: true, // 🔥 IMPORTANT
+      },
+    });
 
-  if (!vendor) {
-    return res.status(404).json({
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: vendor,
+    });
+
+  } catch (error) {
+    res.status(500).json({
       success: false,
-      message: "Vendor not found"
+      message: error.message,
     });
   }
-
-  res.json({ success: true, data: vendor });
 };
 
 //////////////////////////////////////////////////////
 // UPDATE VENDOR
 //////////////////////////////////////////////////////
 exports.updateVendor = async (req, res) => {
-  const businessId = req.business.id;
-  const { id } = req.params;
+  try {
+    const businessId = req.business.id;
+    const { id } = req.params;
 
-  const existing = await prisma.vendor.findFirst({
-    where: { id, businessId }
-  });
+    //////////////////////////////////////////////////////
+    // CHECK EXIST
+    //////////////////////////////////////////////////////
+    const existing = await prisma.vendor.findFirst({
+      where: {
+        id,
+        businessId,
+      },
+    });
 
-  if (!existing) {
-    return res.status(404).json({
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found",
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // UPDATE (SAFE)
+    //////////////////////////////////////////////////////
+    const updated = await prisma.vendor.updateMany({
+      where: {
+        id,
+        businessId,
+      },
+      data: req.body,
+    });
+
+    res.json({
+      success: true,
+      message: "Vendor updated",
+    });
+
+  } catch (error) {
+    console.error("updateVendor error:", error);
+    res.status(500).json({
       success: false,
-      message: "Vendor not found"
+      message: error.message,
     });
   }
-
-  const updated = await prisma.vendor.update({
-    where: { id },
-    data: req.body
-  });
-
-  res.json({ success: true, data: updated });
 };
 
 //////////////////////////////////////////////////////
-// DELETE VENDOR
+// DELETE VENDOR (WITH SAFETY CHECK)
 //////////////////////////////////////////////////////
 exports.deleteVendor = async (req, res) => {
-  const businessId = req.business.id;
-  const { id } = req.params;
+  try {
+    const businessId = req.business.id;
+    const { id } = req.params;
 
-  const existing = await prisma.vendor.findFirst({
-    where: { id, businessId }
-  });
+    //////////////////////////////////////////////////////
+    // CHECK EXIST
+    //////////////////////////////////////////////////////
+    const existing = await prisma.vendor.findFirst({
+      where: {
+        id,
+        businessId,
+      },
+    });
 
-  if (!existing) {
-    return res.status(404).json({
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found",
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // PREVENT DELETE IF USED IN PO
+    //////////////////////////////////////////////////////
+    const hasPO = await prisma.purchaseOrder.findFirst({
+      where: {
+        vendorId: id,
+      },
+    });
+
+    if (hasPO) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot delete vendor with purchase orders",
+      });
+    }
+
+    //////////////////////////////////////////////////////
+    // DELETE
+    //////////////////////////////////////////////////////
+    await prisma.vendor.delete({
+      where: { id },
+    });
+
+    res.json({
+      success: true,
+      message: "Vendor deleted",
+    });
+
+  } catch (error) {
+    console.error("deleteVendor error:", error);
+    res.status(500).json({
       success: false,
-      message: "Vendor not found"
+      message: error.message,
     });
   }
-
-  await prisma.vendor.delete({
-    where: { id }
-  });
-
-  res.json({
-    success: true,
-    message: "Vendor deleted"
-  });
 };

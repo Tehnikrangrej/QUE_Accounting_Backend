@@ -1,71 +1,46 @@
-const express = require("express");
-const router = express.Router();
-
-const vendorController = require("../controllers/vendor");
-
-const authMiddleware = require("../middlewares/authMiddleware");
-const businessMiddleware = require("../middlewares/business.middleware");
-const checkBusinessSubscription = require("../middlewares/subscriptionMiddleware");
+const router = require("express").Router();
+const auth = require("../middlewares/authMiddleware");
+const business = require("../middlewares/business.middleware");
 const checkPermission = require("../middlewares/checkPermission");
+const Controller = require("../controllers/vendor");
 
-//////////////////////////////////////////////////////
-// CREATE VENDOR
-//////////////////////////////////////////////////////
 router.post(
   "/",
-  authMiddleware,
-  businessMiddleware,
-  checkBusinessSubscription,
-  checkPermission("Expense", "create"),
-  vendorController.createVendor
+  auth,
+  business,
+  checkPermission("vendor", "create"),
+  Controller.createVendor
 );
 
-//////////////////////////////////////////////////////
-// GET ALL VENDORS
-//////////////////////////////////////////////////////
 router.get(
   "/",
-  authMiddleware,
-  businessMiddleware,
-  checkBusinessSubscription,
-  checkPermission("Expense", "view"),
-  vendorController.getVendors
+  auth,
+  business,
+  Controller.getVendors
 );
 
-//////////////////////////////////////////////////////
-// GET SINGLE VENDOR
-//////////////////////////////////////////////////////
 router.get(
   "/:id",
-  authMiddleware,
-  businessMiddleware,
-  checkBusinessSubscription,
-  checkPermission("Expense", "view"),
-  vendorController.getVendor
+  auth,
+  business,
+
+  Controller.getVendor
 );
 
-//////////////////////////////////////////////////////
-// UPDATE VENDOR
-//////////////////////////////////////////////////////
-router.patch(
+router.put(
   "/:id",
-  authMiddleware,
-  businessMiddleware,
-  checkBusinessSubscription,
-  checkPermission("Expense", "update"),
-  vendorController.updateVendor
+  auth,
+  business,
+  checkPermission("vendor", "update"),
+  Controller.updateVendor
 );
 
-//////////////////////////////////////////////////////
-// DELETE VENDOR
-//////////////////////////////////////////////////////
 router.delete(
   "/:id",
-  authMiddleware,
-  businessMiddleware,
-  checkBusinessSubscription,
-  checkPermission("Expense", "delete"),
-  vendorController.deleteVendor
+  auth,
+  business,
+  checkPermission("vendor", "delete"),
+  Controller.deleteVendor
 );
 
 module.exports = router;

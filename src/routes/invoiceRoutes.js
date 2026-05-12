@@ -5,6 +5,9 @@ const {
   createInvoice,
   updateInvoice,
   deleteInvoice,
+  generateInvoicePdf,
+  downloadInvoicePdf,
+  bulkUpdateInvoices,
 } = require("../controllers/invoiceController");
 const authMiddleware = require("../middlewares/authMiddleware");
 const businessMiddleware = require("../middlewares/business.middleware");
@@ -19,6 +22,10 @@ router.use(authMiddleware);
 // Allow read operations even with expired subscription
 router.get("/", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "read"), getInvoices);
 router.get("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "read"), getInvoiceById); 
+router.post("/:id/generate-pdf", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), generateInvoicePdf);
+router.get("/:id/download-pdf", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "read"), downloadInvoicePdf);
+router.post("/bulk-update", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), bulkUpdateInvoices);
+
 // Require active subscription for write operations
 router.post("/",authMiddleware, businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "create"), createInvoice);
 router.patch("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), updateInvoice);
