@@ -4,6 +4,7 @@ const prisma = require("../config/prisma");
 // PROFIT & LOSS
 //////////////////////////////////////////////////////
 exports.getProfitLoss = async (req, res) => {
+
   try {
     const entries = await prisma.journalEntry.findMany({
       where: { businessId: req.business.id },
