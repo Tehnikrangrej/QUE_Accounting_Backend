@@ -7,6 +7,7 @@ const { successResponse, errorResponse } = require("../utils/response");
 // REGISTER
 //////////////////////////////////////////////////////
 exports.register = async (req, res) => {
+
   try {
     const { name, email, password } = req.body;
 
