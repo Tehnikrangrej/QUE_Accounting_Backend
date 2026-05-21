@@ -1,318 +1,142 @@
-const prisma = require("../config/prisma");
+const salesOrderService = require("../services/sales/salesOrder.service");
+const { createSalesOrderSchema, updateSalesOrderSchema } = require("../validations/sales.validation");
+const { successResponse, errorResponse } = require("../utils/response");
 
-const VALID_STATUS = ["Draft", "Confirmed", "Completed", "Cancelled"];
-
-//////////////////////////////////////////////////////
-// GENERATE ORDER NUMBER
-//////////////////////////////////////////////////////
-const generateOrderNumber = async () => {
-  const count = await prisma.salesOrder.count();
-  return `SO-${(count + 1).toString().padStart(3, "0")}`;
-};
-
-//////////////////////////////////////////////////////
-// CREATE SALES ORDER
-//////////////////////////////////////////////////////
 exports.createSalesOrder = async (req, res) => {
   try {
-    const {
-      customerId,
-      quotationId,
-      dealId,
-      assignedToId,
-      items,
-      tax = 0,
-      discount = 0,
-      orderDate,
-      deliveryDate,
-      notes,
-    } = req.body;
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
+    const userEmail = req.user.email;
 
-    //////////////////////////////////////////////////////
-    // VALIDATION
-    //////////////////////////////////////////////////////
-    if (!customerId || !items || items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "customerId and items are required",
-      });
-    }
+    // Validate payload using Zod
+    const validatedData = createSalesOrderSchema.parse(req.body);
 
-    //////////////////////////////////////////////////////
-    // VALIDATE CUSTOMER
-    //////////////////////////////////////////////////////
-    const customer = await prisma.customer.findFirst({
-      where: {
-        id: customerId,
-        businessId: req.business.id,
-      },
-    });
+    const order = await salesOrderService.createSalesOrder(businessId, userId, userEmail, validatedData);
 
-    if (!customer) {
-      return res.status(400).json({
-        success: false,
-        message: "Customer not found",
-      });
-    }
-
-    //////////////////////////////////////////////////////
-    // VALIDATE ASSIGNED USER
-    //////////////////////////////////////////////////////
-    if (assignedToId) {
-      const member = await prisma.businessUser.findFirst({
-        where: {
-          id: assignedToId,
-          businessId: req.business.id,
-          isActive: true,
-        },
-      });
-
-      if (!member) {
-        return res.status(400).json({
-          success: false,
-          message: "Assigned user not part of this business",
-        });
-      }
-    }
-
-    //////////////////////////////////////////////////////
-    // CALCULATE TOTAL
-    //////////////////////////////////////////////////////
-    let calculatedSubtotal = 0
-    let totalTaxAmount = 0
-
-    const mappedItems = items.map((item) => {
-      const lineAmount = Number(item.quantity || 0) * Number(item.price || 0)
-      const lineTax = (lineAmount * Number(item.taxPercent || 0)) / 100
-      
-      calculatedSubtotal += lineAmount
-      totalTaxAmount += lineTax
-
-      return {
-        description: item.description || item.name,
-        itemType: item.itemType || item.type || 'GOODS',
-        hsnSacCode: item.hsnSacCode || item.hsn,
-        quantity: Number(item.quantity || 0),
-        price: Number(item.price || 0),
-        taxPercent: Number(item.taxPercent || 0),
-        total: lineAmount + lineTax,
-      }
-    })
-
-    const finalGrandTotal = calculatedSubtotal + totalTaxAmount - Number(discount || 0)
-
-    //////////////////////////////////////////////////////
-    // CREATE
-    //////////////////////////////////////////////////////
-    const order = await prisma.salesOrder.create({
-      data: {
-        businessId: req.business.id,
-        orderNumber: await generateOrderNumber(),
-
-        customerId,
-        quotationId,
-        dealId,
-        assignedToId,
-
-        subtotal: calculatedSubtotal,
-        tax: totalTaxAmount,
-        discount: Number(discount || 0),
-        totalAmount: finalGrandTotal,
-
-        orderDate: new Date(orderDate),
-        deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
-
-        notes,
-
-        items: {
-          create: mappedItems,
-        },
-      },
-      include: {
-        items: true,
-      },
-    });
-
-    res.status(201).json({
-      success: true,
-      order,
-    });
-
+    return successResponse(res, order, "Sales Order created successfully and stock reserved", 201);
   } catch (error) {
-    console.error("createSalesOrder error:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    console.error("createSalesOrder controller error:", error);
+    if (error.name === "ZodError") {
+      return errorResponse(res, error.errors[0].message, 400, error.errors);
+    }
+    return errorResponse(res, error.message, 400);
   }
 };
 
-//////////////////////////////////////////////////////
-// GET ALL SALES ORDERS
-//////////////////////////////////////////////////////
+exports.convertQuotation = async (req, res) => {
+  try {
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
+    const userEmail = req.user.email;
+    const { quotationId } = req.params;
+
+    const order = await salesOrderService.convertQuotationToSalesOrder(businessId, userId, userEmail, quotationId);
+
+    return successResponse(res, order, "Quotation converted to Sales Order successfully", 201);
+  } catch (error) {
+    console.error("convertQuotation controller error:", error);
+    return errorResponse(res, error.message, 400);
+  }
+};
+
 exports.getSalesOrders = async (req, res) => {
   try {
+    const businessId = req.business.id;
+    const { customerId, status } = req.query;
+
+    const prisma = require("../config/prisma");
     const orders = await prisma.salesOrder.findMany({
       where: {
-        businessId: req.business.id,
+        businessId,
+        isDeleted: false,
+        customerId: customerId || undefined,
+        status: status || undefined
       },
       include: {
-        customer: true,
-        quotation: true,
-        deal: true,
-        items: true,
-        assignedTo: {
-          include: { user: true },
+        customer: {
+          select: { id: true, name: true, company: true }
         },
+        items: true
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: { createdAt: "desc" }
     });
 
-    res.json({
-      success: true,
-      orders,
-    });
-
+    return successResponse(res, orders, "Sales Orders fetched successfully");
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    console.error("getSalesOrders controller error:", error);
+    return errorResponse(res, error.message, 500);
   }
 };
 
-//////////////////////////////////////////////////////
-// GET SINGLE SALES ORDER
-//////////////////////////////////////////////////////
 exports.getSalesOrderById = async (req, res) => {
   try {
+    const businessId = req.business.id;
     const { id } = req.params;
 
-    const order = await prisma.salesOrder.findFirst({
-      where: {
-        id,
-        businessId: req.business.id,
-      },
-      include: {
-        customer: true,
-        quotation: true,
-        deal: true,
-        items: true,
-        assignedTo: {
-          include: { user: true },
-        },
-      },
-    });
+    const order = await salesOrderService.getSalesOrderById(businessId, id);
 
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Sales order not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      order,
-    });
-
+    return successResponse(res, order, "Sales Order retrieved successfully");
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    console.error("getSalesOrderById controller error:", error);
+    return errorResponse(res, error.message, 404);
   }
 };
 
-//////////////////////////////////////////////////////
-// UPDATE SALES ORDER
-//////////////////////////////////////////////////////
 exports.updateSalesOrder = async (req, res) => {
   try {
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
+    const userEmail = req.user.email;
     const { id } = req.params;
 
-    //////////////////////////////////////////////////////
-    // VALIDATE STATUS
-    //////////////////////////////////////////////////////
-    if (req.body.status && !VALID_STATUS.includes(req.body.status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid status",
-      });
-    }
+    // Validate payload using Zod
+    const validatedData = updateSalesOrderSchema.parse(req.body);
 
-    //////////////////////////////////////////////////////
-    // FORMAT DATE
-    //////////////////////////////////////////////////////
-    if (req.body.orderDate) {
-      req.body.orderDate = new Date(req.body.orderDate);
-    }
+    const order = await salesOrderService.updateSalesOrder(businessId, userId, userEmail, id, validatedData);
 
-    //////////////////////////////////////////////////////
-    // UPDATE
-    //////////////////////////////////////////////////////
-    const order = await prisma.salesOrder.update({
-      where: { id },
-      data: req.body,
-      include: {
-        items: true,
-      },
-    });
-
-    res.json({
-      success: true,
-      order,
-    });
-
+    return successResponse(res, order, "Sales Order updated successfully");
   } catch (error) {
-    console.error("updateSalesOrder error:", error);
-
-    if (error.code === "P2025") {
-      return res.status(404).json({
-        success: false,
-        message: "Sales order not found",
-      });
+    console.error("updateSalesOrder controller error:", error);
+    if (error.name === "ZodError") {
+      return errorResponse(res, error.errors[0].message, 400, error.errors);
     }
-
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return errorResponse(res, error.message, 400);
   }
 };
 
-//////////////////////////////////////////////////////
-// DELETE SALES ORDER
-//////////////////////////////////////////////////////
 exports.deleteSalesOrder = async (req, res) => {
   try {
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
+    const userEmail = req.user.email;
     const { id } = req.params;
 
-    const deleted = await prisma.salesOrder.deleteMany({
-      where: {
-        id,
-        businessId: req.business.id,
-      },
-    });
+    await salesOrderService.deleteSalesOrder(businessId, userId, userEmail, id);
 
-    if (deleted.count === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Sales order not found",
-      });
+    return successResponse(res, null, "Sales Order deleted and stock reservation released successfully");
+  } catch (error) {
+    console.error("deleteSalesOrder controller error:", error);
+    return errorResponse(res, error.message, 400);
+  }
+};
+
+exports.changeStatus = async (req, res) => {
+  try {
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
+    const userEmail = req.user.email;
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!status) {
+      return errorResponse(res, "Status is required", 400);
     }
 
-    res.json({
-      success: true,
-      message: "Sales order deleted",
-    });
+    const order = await salesOrderService.changeStatus(businessId, userId, userEmail, id, status);
 
+    return successResponse(res, order, "Sales Order status updated successfully");
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    console.error("changeStatus controller error:", error);
+    return errorResponse(res, error.message, 400);
   }
 };

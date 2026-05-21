@@ -45,6 +45,10 @@ const taskRoutes = require("./routes/taskRoutes");
 const timesRoutes = require("./routes/timesRoutes");
 const invoiceMetaRoutes = require("./routes/invoiceMeta.routes");
 
+const salesReturnRoutes = require("./routes/salesReturnRoutes");
+const recurringInvoiceRoutes = require("./routes/recurringInvoiceRoutes");
+const salesReportRoutes = require("./routes/salesReportRoutes");
+
 // Upgraded CRM Routes
 const crmNoteRoutes = require("./routes/crm/noteRoutes");
 const crmCampaignRoutes = require("./routes/crm/campaignRoutes");
@@ -99,6 +103,10 @@ app.use("/api/projects", projectRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/time-entries", timesRoutes);
 app.use("/api/invoice-meta", invoiceMetaRoutes);
+
+app.use("/api/sales-returns", salesReturnRoutes);
+app.use("/api/recurring-invoices", recurringInvoiceRoutes);
+app.use("/api/sales-reports", salesReportRoutes);
 
 // Upgraded CRM Mounts
 app.use("/api/crm-notes", crmNoteRoutes);

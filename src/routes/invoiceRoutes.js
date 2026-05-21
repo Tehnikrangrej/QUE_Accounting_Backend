@@ -8,6 +8,8 @@ const {
   generateInvoicePdf,
   downloadInvoicePdf,
   bulkUpdateInvoices,
+  convertSalesOrder,
+  changeStatus,
 } = require("../controllers/invoiceController");
 const authMiddleware = require("../middlewares/authMiddleware");
 const businessMiddleware = require("../middlewares/business.middleware");
@@ -16,18 +18,37 @@ const checkPermission = require("../middlewares/checkPermission");
 
 const router = express.Router();
 
-// Apply authentication and tenant middleware to all routes
+// Apply authentication middleware
 router.use(authMiddleware);
 
-// Allow read operations even with expired subscription
+// Get invoices
 router.get("/", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "read"), getInvoices);
-router.get("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "read"), getInvoiceById); 
+
+// Get invoice by ID
+router.get("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "read"), getInvoiceById);
+
+// Generate PDF
 router.post("/:id/generate-pdf", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), generateInvoicePdf);
+
+// Download PDF
 router.get("/:id/download-pdf", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "read"), downloadInvoicePdf);
+
+// Bulk Update
 router.post("/bulk-update", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), bulkUpdateInvoices);
 
-// Require active subscription for write operations
-router.post("/",authMiddleware, businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "create"), createInvoice);
+// Create Invoice
+router.post("/", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "create"), createInvoice);
+
+// Convert Sales Order to Invoice
+router.post("/convert/:salesOrderId", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "create"), convertSalesOrder);
+
+// Update Invoice status
+router.post("/:id/status", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), changeStatus);
+
+// Update Invoice fields
 router.patch("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), updateInvoice);
+
+// Delete Invoice
 router.delete("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "delete"), deleteInvoice);
+
 module.exports = router;
