@@ -44,6 +44,14 @@ const projectRoutes = require("./routes/projectRoutes");
 const taskRoutes = require("./routes/taskRoutes");
 const timesRoutes = require("./routes/timesRoutes");
 const invoiceMetaRoutes = require("./routes/invoiceMeta.routes");
+
+// Upgraded CRM Routes
+const crmNoteRoutes = require("./routes/crm/noteRoutes");
+const crmCampaignRoutes = require("./routes/crm/campaignRoutes");
+const crmEmailLogRoutes = require("./routes/crm/emailLogRoutes");
+const crmReportRoutes = require("./routes/crm/reportRoutes");
+const crmTaskRoutes = require("./routes/crm/crmTaskRoutes");
+
 const app = express();
 
 app.use(cors());
@@ -91,6 +99,13 @@ app.use("/api/projects", projectRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/time-entries", timesRoutes);
 app.use("/api/invoice-meta", invoiceMetaRoutes);
+
+// Upgraded CRM Mounts
+app.use("/api/crm-notes", crmNoteRoutes);
+app.use("/api/crm-campaigns", crmCampaignRoutes);
+app.use("/api/crm-email-logs", crmEmailLogRoutes);
+app.use("/api/crm-reports", crmReportRoutes);
+app.use("/api/crm-tasks", crmTaskRoutes);
 
 app.get("/", (req, res) => {
   res.send("QUE Accounting Backend Running...");

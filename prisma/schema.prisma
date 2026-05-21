@@ -88,6 +88,11 @@
     
     timeEntries TimeEntry[]
     projects Project[]
+    notes Note[]
+    emailLogs EmailLog[]
+    campaigns Campaign[]
+    crmTasks CrmTask[]
+    leadConversionLogs LeadConversionLog[]
 }
 
   //////////////////////////////////////////////////////
@@ -119,6 +124,12 @@
     projectMembers ProjectMember[]
     taskAssignees TaskAssignee[]
     timeEntries TimeEntry[]
+    customerOwner Customer[] @relation("CustomerOwner")
+    contactOwner CustomerContact[] @relation("ContactOwner")
+    createdNotes Note[] @relation("NoteCreatedBy")
+    crmTasksAssigned CrmTask[] @relation("CrmTaskAssignedTo")
+    crmTasksCreated CrmTask[] @relation("CrmTaskCreatedBy")
+    leadConversionLogs LeadConversionLog[]
 }
 
   //////////////////////////////////////////////////////
@@ -251,7 +262,29 @@ model Customer {
   shippingState   String?
   shippingZipCode String?
   shippingCountry String?
-    region     Region   // 🔥 ADD THIS
+  region          Region
+
+  //////////////////////////////////////////////////////
+  // UPGRADED CRM ACCOUNT FIELDS
+  //////////////////////////////////////////////////////
+  industry        String?
+  annualRevenue   Float?
+  employeeCount   Int?
+  accountOwnerId  String?
+  accountOwner    BusinessUser? @relation("CustomerOwner", fields: [accountOwnerId], references: [id])
+  accountType     CrmAccountType?
+  parentAccountId String?
+  parentAccount   Customer? @relation("CustomerParentChild", fields: [parentAccountId], references: [id], onDelete: SetNull)
+  childAccounts   Customer[] @relation("CustomerParentChild")
+  linkedinUrl     String?
+  facebookUrl     String?
+  twitterUrl      String?
+  tags            String[]
+  description     String?
+  lastContactedAt DateTime?
+  crmStatus       CrmStatus?
+  isDeleted       Boolean  @default(false)
+  deletedAt       DateTime?
 
   //////////////////////////////////////////////////////
   // STATUS + META
@@ -264,10 +297,13 @@ model Customer {
   // RELATIONS
   //////////////////////////////////////////////////////
   invoices        Invoice[]
-  leadId   String? @unique
+  leadId          String? @unique
   leads           Lead[]
 
   @@index([businessId])
+  @@index([accountOwnerId])
+  @@index([parentAccountId])
+  @@index([isDeleted])
   @@map("customers")
   creditNotes CreditNote[]
   customerContacts CustomerContact[]
@@ -277,6 +313,10 @@ model Customer {
   quotations Quotation[]
   salesOrders SalesOrder[]
   projects Project[]
+  notes       Note[]
+  emailLogs   EmailLog[]
+  crmTasks    CrmTask[]
+  leadConversionLogs LeadConversionLog[]
 }
 enum Region {
   INDIA
@@ -757,6 +797,16 @@ model CustomerContact {
   isActive    Boolean  @default(true)
 
   //////////////////////////////////////////////////////
+  // CRM CONTACT UPGRADES
+  //////////////////////////////////////////////////////
+  isPrimary      Boolean       @default(false)
+  contactOwnerId String?
+  contactOwner   BusinessUser? @relation("ContactOwner", fields: [contactOwnerId], references: [id])
+  tags           String[]
+  isDeleted      Boolean       @default(false)
+  deletedAt      DateTime?
+
+  //////////////////////////////////////////////////////
   // META
   //////////////////////////////////////////////////////
   createdAt   DateTime @default(now())
@@ -764,7 +814,13 @@ model CustomerContact {
 
   @@index([customerId])
   @@index([businessId])
+  @@index([contactOwnerId])
+  @@index([isDeleted])
   deals Deal[]
+  activities Activity[]
+  notes      Note[]
+  emailLogs  EmailLog[]
+  crmTasks   CrmTask[]
 }
 
 model Contract {
@@ -855,12 +911,31 @@ assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
   tasks           LeadTask[]
   reminders       LeadReminder[]
 
+  //////////////////////////////////////////////////////
+  // CRM LEAD UPGRADES
+  //////////////////////////////////////////////////////
+  score           Int           @default(0)
+  isDeleted       Boolean       @default(false)
+  deletedAt       DateTime?
+  campaignId      String?
+  campaign        Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   customers Customer[]
 
   activity Activity[]
+  crmNotes      Note[]
+  emailLogs     EmailLog[]
+  crmTasks      CrmTask[]
+  conversionLog LeadConversionLog?
+
+  @@index([businessId])
+  @@index([assignedToId])
+  @@index([stageId])
+  @@index([isDeleted])
+  @@index([campaignId])
 }
 
 model PipelineStage {
@@ -964,10 +1039,21 @@ model Deal {
   expectedCloseDate DateTime?
 
   //////////////////////////////////////////////////////
+  // CRM DEAL PIPELINE UPGRADES
+  //////////////////////////////////////////////////////
+  status          DealStatus    @default(OPEN)
+  lostReason      String?
+  stageHistory    DealStageHistory[]
+  campaignId      String?
+  campaign        Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  isDeleted       Boolean       @default(false)
+  deletedAt       DateTime?
+
+  //////////////////////////////////////////////////////
   // META
   //////////////////////////////////////////////////////
   assignedToId String?
-assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
+  assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
   source     String?
   description String?
 
@@ -976,9 +1062,16 @@ assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
 
   @@index([businessId])
   @@index([customerId])
+  @@index([contactId])
+  @@index([assignedToId])
+  @@index([campaignId])
+  @@index([isDeleted])
   activities Activity[]
   quotations Quotation[]
   salesOrders SalesOrder[]
+  notes       Note[]
+  emailLogs   EmailLog[]
+  crmTasks    CrmTask[]
 }
 
 model Activity {
@@ -993,7 +1086,7 @@ model Activity {
   //////////////////////////////////////////////////////
   // BASIC INFO
   //////////////////////////////////////////////////////
-  type        String   // Call, Meeting
+  type        String   // CALL, MEETING, TASK, EMAIL, NOTE
   title       String
   description String?
 
@@ -1009,6 +1102,9 @@ model Activity {
   customerId  String?
   customer    Customer? @relation(fields: [customerId], references: [id])
 
+  contactId   String?
+  contact     CustomerContact? @relation(fields: [contactId], references: [id])
+
   //////////////////////////////////////////////////////
   // ASSIGNED USER (BusinessUser)
   //////////////////////////////////////////////////////
@@ -1016,10 +1112,23 @@ model Activity {
   assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
 
   //////////////////////////////////////////////////////
-  // DATE
+  // DATE & DETAILS
   //////////////////////////////////////////////////////
   activityDate DateTime
   duration     Int?
+
+  //////////////////////////////////////////////////////
+  // CRM ACTIVITY UPGRADES
+  //////////////////////////////////////////////////////
+  priority     String?   // HIGH, MEDIUM, LOW
+  dueDate      DateTime?
+  reminderAt   DateTime?
+  outcome      String?   // Connected, Left Message, No Answer, etc.
+  meetingLink  String?
+  attendees    Json?     // List of attendees
+  isAllDay     Boolean   @default(false)
+  isDeleted    Boolean   @default(false)
+  deletedAt    DateTime?
 
   //////////////////////////////////////////////////////
   // STATUS
@@ -1033,6 +1142,12 @@ model Activity {
   updatedAt    DateTime @updatedAt
 
   @@index([businessId])
+  @@index([leadId])
+  @@index([dealId])
+  @@index([customerId])
+  @@index([contactId])
+  @@index([assignedToId])
+  @@index([isDeleted])
 }
 
 model Quotation {
@@ -1529,4 +1644,195 @@ model TimeEntry {
 
   businessUser BusinessUser? @relation(fields: [businessUserId], references: [id])
   employee     Employee?     @relation(fields: [employeeId], references: [id])
+}
+
+enum CrmAccountType {
+  CUSTOMER
+  PARTNER
+  PROSPECT
+  RESELLER
+  VENDOR
+  OTHER
+}
+
+enum CrmStatus {
+  ACTIVE
+  INACTIVE
+  LEAD
+  PROSPECT
+  CHURNED
+}
+
+enum DealStatus {
+  OPEN
+  WON
+  LOST
+}
+
+model DealStageHistory {
+  id           String   @id @default(uuid())
+  dealId       String
+  deal         Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  fromStage    String
+  toStage      String
+  changedById  String?
+  changedAt    DateTime @default(now())
+
+  @@index([dealId])
+}
+
+model Note {
+  id           String   @id @default(uuid())
+  businessId   String
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  content      String   @db.Text
+  
+  // CRM Entity Links
+  leadId       String?
+  lead         Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  dealId       String?
+  deal         Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  customerId   String?
+  customer     Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  contactId    String?
+  contact      CustomerContact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  // Author details
+  createdById  String?
+  createdBy    BusinessUser? @relation("NoteCreatedBy", fields: [createdById], references: [id])
+  
+  attachments  Json?    // attachment URLs or info
+  isDeleted    Boolean  @default(false)
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([leadId])
+  @@index([dealId])
+  @@index([customerId])
+  @@index([contactId])
+  @@index([createdById])
+}
+
+model EmailLog {
+  id           String   @id @default(uuid())
+  businessId   String
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  subject      String
+  body         String   @db.Text
+  fromEmail    String
+  toEmail      String
+  status       String   // SENT, DELIVERED, OPENED, FAILED
+  sentAt       DateTime @default(now())
+
+  // CRM Links
+  leadId       String?
+  lead         Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  dealId       String?
+  deal         Deal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  customerId   String?
+  customer     Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  contactId    String?
+  contact      CustomerContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  attachments  Json?    // Array of attachment metadata
+  createdAt    DateTime @default(now())
+
+  @@index([businessId])
+  @@index([leadId])
+  @@index([dealId])
+  @@index([customerId])
+  @@index([contactId])
+}
+
+model Campaign {
+  id             String   @id @default(uuid())
+  businessId     String
+  business       Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name           String
+  type           String   // EMAIL, SOCIAL_MEDIA, PPC, EVENT, OTHER
+  status         String   // PLANNING, ACTIVE, COMPLETED, CANCELLED
+  
+  budget         Float?
+  actualCost     Float?
+  expectedRevenue Float?
+  
+  startDate      DateTime?
+  endDate        DateTime?
+  description    String?
+
+  leads          Lead[]
+  deals          Deal[]
+  
+  isDeleted      Boolean  @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([isDeleted])
+}
+
+model LeadConversionLog {
+  id             String       @id @default(uuid())
+  businessId     String
+  business       Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  leadId         String       @unique
+  lead           Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  contactId      String?
+  dealId         String?
+  convertedById  String?
+  convertedBy    BusinessUser? @relation(fields: [convertedById], references: [id])
+  convertedAt    DateTime     @default(now())
+
+  @@index([businessId])
+  @@index([leadId])
+  @@index([customerId])
+}
+
+model CrmTask {
+  id           String   @id @default(uuid())
+  businessId   String
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  title        String
+  description  String?  @db.Text
+  status       String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, DEFERRED
+  priority     String   @default("MEDIUM")  // LOW, MEDIUM, HIGH
+  dueDate      DateTime?
+  reminderAt   DateTime?
+  
+  // CRM Entity Links
+  leadId       String?
+  lead         Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  dealId       String?
+  deal         Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  customerId   String?
+  customer     Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  contactId    String?
+  contact      CustomerContact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  // Assignment
+  assignedToId String?
+  assignedTo   BusinessUser? @relation("CrmTaskAssignedTo", fields: [assignedToId], references: [id])
+  
+  createdById  String?
+  createdBy    BusinessUser? @relation("CrmTaskCreatedBy", fields: [createdById], references: [id])
+
+  isDeleted    Boolean  @default(false)
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([leadId])
+  @@index([dealId])
+  @@index([customerId])
+  @@index([contactId])
+  @@index([assignedToId])
+  @@index([createdById])
+  @@index([isDeleted])
 }

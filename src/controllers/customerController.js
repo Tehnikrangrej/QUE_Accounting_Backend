@@ -1,14 +1,14 @@
 const prisma = require("../config/prisma");
+const { buildPrismaQuery, getPaginationMeta, logAudit } = require("../utils/crmHelper");
 
 //////////////////////////////////////////////////////
-// CREATE CUSTOMER
+// CREATE CRM ACCOUNT (UPGRADED CUSTOMER)
 //////////////////////////////////////////////////////
 exports.createCustomer = async (req, res) => {
   try {
     const {
       company,
-      region, // 🔥 IMPORTANT
-
+      region,
       vatNumber,
       phone,
       website,
@@ -33,15 +33,29 @@ exports.createCustomer = async (req, res) => {
       shippingState,
       shippingZipCode,
       shippingCountry,
+
+      // New CRM Fields
+      industry,
+      annualRevenue,
+      employeeCount,
+      accountOwnerId,
+      accountType,
+      parentAccountId,
+      linkedinUrl,
+      facebookUrl,
+      twitterUrl,
+      tags,
+      description,
+      crmStatus = "ACTIVE",
     } = req.body;
 
     //////////////////////////////////////////////////////
-    // VALIDATION
+    // VALIDATIONS
     //////////////////////////////////////////////////////
     if (!company) {
       return res.status(400).json({
         success: false,
-        message: "company is required",
+        message: "company (Account Name) is required",
       });
     }
 
@@ -52,16 +66,48 @@ exports.createCustomer = async (req, res) => {
       });
     }
 
+    // Validate Account Owner (if provided)
+    if (accountOwnerId) {
+      const owner = await prisma.businessUser.findFirst({
+        where: { id: accountOwnerId, businessId: req.business.id, isActive: true },
+      });
+      if (!owner) {
+        return res.status(400).json({
+          success: false,
+          message: "Assigned account owner does not belong to this business or is inactive",
+        });
+      }
+    }
+
+    // Validate Parent Account (if provided)
+    if (parentAccountId) {
+      const parent = await prisma.customer.findFirst({
+        where: { id: parentAccountId, businessId: req.business.id, isDeleted: false },
+      });
+      if (!parent) {
+        return res.status(400).json({
+          success: false,
+          message: "Parent account not found",
+        });
+      }
+    }
+
+    // Format tags
+    let formattedTags = [];
+    if (typeof tags === "string") {
+      formattedTags = tags.split(",").map((t) => t.trim()).filter(Boolean);
+    } else if (Array.isArray(tags)) {
+      formattedTags = tags;
+    }
+
     //////////////////////////////////////////////////////
-    // CREATE
+    // CREATE CRM ACCOUNT
     //////////////////////////////////////////////////////
     const customer = await prisma.customer.create({
       data: {
         businessId: req.business.id,
-
         company,
-        region, // 🔥 SAVE REGION
-
+        region,
         vatNumber,
         phone,
         website,
@@ -86,14 +132,40 @@ exports.createCustomer = async (req, res) => {
         shippingState,
         shippingZipCode,
         shippingCountry,
+
+        // Upgraded CRM Fields
+        industry,
+        annualRevenue: annualRevenue ? Number(annualRevenue) : null,
+        employeeCount: employeeCount ? parseInt(employeeCount) : null,
+        accountOwnerId,
+        accountType,
+        parentAccountId,
+        linkedinUrl,
+        facebookUrl,
+        twitterUrl,
+        tags: formattedTags,
+        description,
+        crmStatus,
       },
+      include: {
+        accountOwner: { include: { user: true } },
+        parentAccount: true,
+      },
+    });
+
+    // Logging audit trail
+    await logAudit(req.business.id, {
+      userId: req.user.userId,
+      action: "CREATE",
+      moduleName: "CustomerAccount",
+      recordId: customer.id,
+      details: { company: customer.company },
     });
 
     res.status(201).json({
       success: true,
       customer,
     });
-
   } catch (error) {
     console.error("createCustomer error:", error);
     res.status(500).json({
@@ -104,54 +176,37 @@ exports.createCustomer = async (req, res) => {
 };
 
 //////////////////////////////////////////////////////
-// GET ALL CUSTOMERS
+// GET ALL CRM ACCOUNTS (WITH PAGINATION, FILTER, SEARCH)
 //////////////////////////////////////////////////////
 exports.getCustomers = async (req, res) => {
   try {
-    const customers = await prisma.customer.findMany({
-      where: {
-        businessId: req.business.id,
+    const { queryOptions, pagination } = buildPrismaQuery(req, {
+      searchFields: ["company", "phone", "website", "vatNumber", "city", "country"],
+      filterFields: {
+        industry: "industry",
+        crmStatus: "crmStatus",
+        region: "region",
+        accountType: "accountType",
+        accountOwnerId: "accountOwnerId",
       },
-      orderBy: {
-        createdAt: "desc",
-      },
-      select: {
-        id: true,
-        company: true,
-        region: true,
-        vatNumber: true,
-        phone: true,
-        website: true,
-        group: true,
-        currency: true,
-        defaultLanguage: true,
-        address: true,
-        city: true,
-        state: true,
-        zipCode: true,
-        country: true,
-        billingStreet: true,
-        billingCity: true,
-        billingState: true,
-        billingZipCode: true,
-        billingCountry: true,
-        shippingStreet: true,
-        shippingCity: true,
-        shippingState: true,
-        shippingZipCode: true,
-        shippingCountry: true,
-        createdAt: true,
-        updatedAt: true,
-        businessId: true,
+      relations: {
+        accountOwner: { select: { id: true, user: { select: { name: true, email: true } } } },
+        parentAccount: { select: { id: true, company: true } },
       },
     });
+
+    // Calculate total matching records for pagination meta
+    const totalCount = await prisma.customer.count({ where: queryOptions.where });
+
+    const customers = await prisma.customer.findMany(queryOptions);
 
     res.json({
       success: true,
-      customers,
+      data: customers,
+      pagination: getPaginationMeta(totalCount, pagination.page, pagination.limit),
     });
-
   } catch (error) {
+    console.error("getCustomers error:", error);
     res.status(500).json({
       success: false,
       message: error.message,
@@ -160,7 +215,7 @@ exports.getCustomers = async (req, res) => {
 };
 
 //////////////////////////////////////////////////////
-// GET SINGLE CUSTOMER
+// GET SINGLE CRM ACCOUNT (BY ID)
 //////////////////////////////////////////////////////
 exports.getCustomerById = async (req, res) => {
   try {
@@ -168,13 +223,23 @@ exports.getCustomerById = async (req, res) => {
       where: {
         id: req.params.id,
         businessId: req.business.id,
+        isDeleted: false,
+      },
+      include: {
+        accountOwner: { include: { user: true } },
+        parentAccount: true,
+        childAccounts: true,
+        customerContacts: { where: { isDeleted: false } },
+        deals: { where: { isDeleted: false } },
+        activities: { where: { isDeleted: false } },
+        notes: { where: { isDeleted: false } },
       },
     });
 
     if (!customer) {
       return res.status(404).json({
         success: false,
-        message: "Customer not found",
+        message: "Account not found",
       });
     }
 
@@ -182,7 +247,6 @@ exports.getCustomerById = async (req, res) => {
       success: true,
       customer,
     });
-
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -192,16 +256,34 @@ exports.getCustomerById = async (req, res) => {
 };
 
 //////////////////////////////////////////////////////
-// UPDATE CUSTOMER
+// UPDATE CRM ACCOUNT
 //////////////////////////////////////////////////////
 exports.updateCustomer = async (req, res) => {
   try {
     const { id } = req.params;
-    const { region, ...rest } = req.body;
+    const {
+      region,
+      annualRevenue,
+      employeeCount,
+      accountOwnerId,
+      parentAccountId,
+      tags,
+      ...rest
+    } = req.body;
 
-    //////////////////////////////////////////////////////
-    // REGION VALIDATION
-    //////////////////////////////////////////////////////
+    // Validate Account
+    const existing = await prisma.customer.findFirst({
+      where: { id, businessId: req.business.id, isDeleted: false },
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Account not found",
+      });
+    }
+
+    // Validate Region
     if (region && !["INDIA", "UAE"].includes(region)) {
       return res.status(400).json({
         success: false,
@@ -209,32 +291,80 @@ exports.updateCustomer = async (req, res) => {
       });
     }
 
-    //////////////////////////////////////////////////////
-    // UPDATE
-    //////////////////////////////////////////////////////
-    const updated = await prisma.customer.updateMany({
-      where: {
-        id,
-        businessId: req.business.id,
-      },
-      data: {
-        ...rest,
-        ...(region && { region }),
+    // Validate Account Owner
+    if (accountOwnerId) {
+      const owner = await prisma.businessUser.findFirst({
+        where: { id: accountOwnerId, businessId: req.business.id, isActive: true },
+      });
+      if (!owner) {
+        return res.status(400).json({
+          success: false,
+          message: "Assigned account owner is invalid",
+        });
+      }
+    }
+
+    // Validate Parent Account
+    if (parentAccountId) {
+      if (parentAccountId === id) {
+        return res.status(400).json({
+          success: false,
+          message: "An account cannot be its own parent",
+        });
+      }
+      const parent = await prisma.customer.findFirst({
+        where: { id: parentAccountId, businessId: req.business.id, isDeleted: false },
+      });
+      if (!parent) {
+        return res.status(400).json({
+          success: false,
+          message: "Parent account not found",
+        });
+      }
+    }
+
+    // Format tags
+    let formattedTags = undefined;
+    if (tags) {
+      if (typeof tags === "string") {
+        formattedTags = tags.split(",").map((t) => t.trim()).filter(Boolean);
+      } else if (Array.isArray(tags)) {
+        formattedTags = tags;
+      }
+    }
+
+    const updatedData = {
+      ...rest,
+      ...(region && { region }),
+      ...(annualRevenue !== undefined && { annualRevenue: annualRevenue ? Number(annualRevenue) : null }),
+      ...(employeeCount !== undefined && { employeeCount: employeeCount ? parseInt(employeeCount) : null }),
+      ...(accountOwnerId !== undefined && { accountOwnerId }),
+      ...(parentAccountId !== undefined && { parentAccountId }),
+      ...(formattedTags && { tags: formattedTags }),
+    };
+
+    const updated = await prisma.customer.update({
+      where: { id },
+      data: updatedData,
+      include: {
+        accountOwner: { include: { user: true } },
+        parentAccount: true,
       },
     });
 
-    if (updated.count === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Customer not found",
-      });
-    }
+    await logAudit(req.business.id, {
+      userId: req.user.userId,
+      action: "UPDATE",
+      moduleName: "CustomerAccount",
+      recordId: id,
+      details: updatedData,
+    });
 
     res.json({
       success: true,
-      message: "Customer updated",
+      message: "Account updated successfully",
+      customer: updated,
     });
-
   } catch (error) {
     console.error("updateCustomer error:", error);
     res.status(500).json({
@@ -245,31 +375,54 @@ exports.updateCustomer = async (req, res) => {
 };
 
 //////////////////////////////////////////////////////
-// DELETE CUSTOMER
+// SOFT DELETE CRM ACCOUNT
 //////////////////////////////////////////////////////
 exports.deleteCustomer = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deleted = await prisma.customer.deleteMany({
+    // Check if account has active invoices or deals
+    const invoiceCount = await prisma.invoice.count({
+      where: { customerId: id, businessId: req.business.id },
+    });
+
+    const dealCount = await prisma.deal.count({
+      where: { customerId: id, businessId: req.business.id, isDeleted: false },
+    });
+
+    // Instead of completely breaking historical records, we force soft-delete
+    const deleted = await prisma.customer.updateMany({
       where: {
         id,
         businessId: req.business.id,
+        isDeleted: false,
+      },
+      data: {
+        isDeleted: true,
+        deletedAt: new Date(),
+        isActive: false,
       },
     });
 
     if (deleted.count === 0) {
       return res.status(404).json({
         success: false,
-        message: "Customer not found",
+        message: "Account not found or already deleted",
       });
     }
 
-    res.json({
-      success: true,
-      message: "Customer deleted",
+    await logAudit(req.business.id, {
+      userId: req.user.userId,
+      action: "DELETE_SOFT",
+      moduleName: "CustomerAccount",
+      recordId: id,
+      details: { invoiceHistoryCount: invoiceCount, activeDealsCount: dealCount },
     });
 
+    res.json({
+      success: true,
+      message: "Account soft-deleted successfully, preserving all past billing records.",
+    });
   } catch (error) {
     console.error("deleteCustomer error:", error);
     res.status(500).json({
