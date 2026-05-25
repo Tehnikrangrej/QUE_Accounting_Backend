@@ -30,7 +30,7 @@ exports.getProfiles = async (req, res) => {
     const profiles = await prisma.recurringInvoice.findMany({
       where: { businessId },
       include: {
-        customer: { select: { id: true, name: true, company: true } },
+        customer: { select: { id: true, company: true } },
         items: true
       },
       orderBy: { createdAt: "desc" }

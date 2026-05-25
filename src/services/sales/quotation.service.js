@@ -207,8 +207,12 @@ const getQuotationById = async (businessId, quotationId) => {
       assignedTo: {
         select: {
           id: true,
-          name: true,
-          email: true
+          user: {
+            select: {
+              name: true,
+              email: true
+            }
+          }
         }
       }
     }

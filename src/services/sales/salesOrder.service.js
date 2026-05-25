@@ -311,8 +311,12 @@ const getSalesOrderById = async (businessId, orderId) => {
       assignedTo: {
         select: {
           id: true,
-          name: true,
-          email: true
+          user: {
+            select: {
+              name: true,
+              email: true
+            }
+          }
         }
       }
     }

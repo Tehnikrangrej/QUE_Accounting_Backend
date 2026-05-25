@@ -54,7 +54,7 @@ exports.getSalesOrders = async (req, res) => {
       },
       include: {
         customer: {
-          select: { id: true, name: true, company: true }
+          select: { id: true, company: true }
         },
         items: true
       },

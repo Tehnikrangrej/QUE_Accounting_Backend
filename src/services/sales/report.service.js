@@ -28,8 +28,8 @@ const getSalesDashboard = async (businessId) => {
       customer: {
         select: {
           id: true,
-          name: true,
-          email: true
+          company: true,
+          phone: true
         }
       }
     },
@@ -81,11 +81,11 @@ const getSalesDashboard = async (businessId) => {
     if (item.customerId) {
       const customer = await prisma.customer.findUnique({
         where: { id: item.customerId },
-        select: { name: true, company: true }
+        select: { company: true }
       });
       topCustomers.push({
         customerId: item.customerId,
-        name: customer ? customer.name : "Deleted Customer",
+        name: customer ? customer.company : "Deleted Customer",
         company: customer ? customer.company : null,
         totalSales: item._sum.grandTotal || 0
       });
