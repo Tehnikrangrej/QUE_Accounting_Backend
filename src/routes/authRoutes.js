@@ -7,6 +7,7 @@ router.post("/register", authController.register);
 router.post("/login", authController.login);
 router.get("/", authController.getAllUsers);
 router.get("/me", authMiddleware, authController.getLoggedInUser);
+router.put("/update", authMiddleware, authController.updateUser);
 
 // Protected routes (authentication required)
 router.use((req, res, next) => {
