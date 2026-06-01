@@ -44,6 +44,9 @@ const projectRoutes = require("./routes/projectRoutes");
 const taskRoutes = require("./routes/taskRoutes");
 const timesRoutes = require("./routes/timesRoutes");
 const invoiceMetaRoutes = require("./routes/invoiceMeta.routes");
+const erpRoutes = require("./routes/erpRoutes");
+const purchaseRoutes = require("./routes/purchaseRoutes");
+
 const app = express();
 
 app.use(cors());
@@ -51,6 +54,7 @@ app.use(express.json());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/business", businessRoutes);
+app.use("/api/purchase", purchaseRoutes); // New unified purchase routes
 app.use("/api/customers", customerRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/subscriptions", subscriptionRoutes);
@@ -59,6 +63,7 @@ app.use("/api/permissions", permissionRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/check-email", checkByEmailRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/erp", erpRoutes);
 app.use("/api/credit-notes", creditNoteRoutes);
 app.use("/api/modules", moduleRoutes);
 app.use("/api/ledger",customerLedgerRoutes);

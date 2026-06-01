@@ -238,6 +238,7 @@ module.exports = (invoice, settings = {}) => {
         <th width="30" class="text-center">#</th>
         <th>Description</th>
         <th width="80" class="text-center">${hsnHeader}</th>
+        <th width="80" class="text-center">Warehouse</th>
         <th width="50" class="text-center">${qtyHeader}</th>
         <th width="80" class="text-center">Rate</th>
         <th width="90" class="text-center">Taxes</th>
@@ -251,6 +252,7 @@ module.exports = (invoice, settings = {}) => {
         <td class="text-center">${idx + 1}</td>
         <td>${i.description}</td>
         <td class="text-center">${i.hsnSacCode || '-'}</td>
+        <td class="text-center">${i.warehouse?.name || '-'}</td>
         <td class="text-center">${i.hours}</td>
         <td class="text-center">${fmt(i.rate)}</td>
         <td class="text-center" style="font-size:8px;">${(i.taxDetails || []).map(t => `${t.name} (${t.rate}%)`).join('<br/>')}</td>

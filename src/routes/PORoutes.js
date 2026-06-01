@@ -35,6 +35,14 @@ router.put(
   Controller.updatePurchaseOrder
 );
 
+router.post(
+  "/:id/receive",
+  auth,
+  business,
+  checkPermission("purchase_order", "update"),
+  Controller.receiveGoods
+);
+
 router.delete(
   "/:id",
   auth,

@@ -27,7 +27,7 @@ router.get("/:id/download-pdf", businessMiddleware, checkBusinessSubscription, c
 router.post("/bulk-update", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), bulkUpdateInvoices);
 
 // Require active subscription for write operations
-router.post("/",authMiddleware, businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "create"), createInvoice);
+router.post("/", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "create"), createInvoice);
 router.patch("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), updateInvoice);
 router.delete("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "delete"), deleteInvoice);
 module.exports = router;

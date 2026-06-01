@@ -19,6 +19,13 @@ router.get(
   Controller.getProducts
 );
 
+router.get(
+  "/search",
+  auth,
+  business,
+  Controller.searchProducts
+);
+
 router.put(
   "/:id",
   auth,
@@ -33,5 +40,23 @@ router.delete(
   checkPermission("product", "delete"),
   Controller.deleteProduct
 );
+
+// Categories
+router.get("/categories", auth, business, Controller.getCategories);
+router.post("/categories", auth, business, Controller.createCategory);
+router.put("/categories/:id", auth, business, Controller.updateCategory);
+router.delete("/categories/:id", auth, business, Controller.deleteCategory);
+
+// Brands
+router.get("/brands", auth, business, Controller.getBrands);
+router.post("/brands", auth, business, Controller.createBrand);
+router.put("/brands/:id", auth, business, Controller.updateBrand);
+router.delete("/brands/:id", auth, business, Controller.deleteBrand);
+
+// Units
+router.get("/units", auth, business, Controller.getUnits);
+router.post("/units", auth, business, Controller.createUnit);
+router.put("/units/:id", auth, business, Controller.updateUnit);
+router.delete("/units/:id", auth, business, Controller.deleteUnit);
 
 module.exports = router;

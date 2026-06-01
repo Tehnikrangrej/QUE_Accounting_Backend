@@ -1,12 +1,13 @@
 const prisma = require("../config/prisma");
+const InventoryService = require("../services/inventoryService");
 
 const VALID_STATUS = ["Draft", "Confirmed", "Completed", "Cancelled"];
 
 //////////////////////////////////////////////////////
 // GENERATE ORDER NUMBER
 //////////////////////////////////////////////////////
-const generateOrderNumber = async () => {
-  const count = await prisma.salesOrder.count();
+const generateOrderNumber = async (businessId) => {
+  const count = await prisma.salesOrder.count({ where: { businessId } });
   return `SO-${(count + 1).toString().padStart(3, "0")}`;
 };
 
@@ -21,16 +22,12 @@ exports.createSalesOrder = async (req, res) => {
       dealId,
       assignedToId,
       items,
-      tax = 0,
       discount = 0,
       orderDate,
       deliveryDate,
       notes,
     } = req.body;
 
-    //////////////////////////////////////////////////////
-    // VALIDATION
-    //////////////////////////////////////////////////////
     if (!customerId || !items || items.length === 0) {
       return res.status(400).json({
         success: false,
@@ -38,112 +35,77 @@ exports.createSalesOrder = async (req, res) => {
       });
     }
 
-    //////////////////////////////////////////////////////
-    // VALIDATE CUSTOMER
-    //////////////////////////////////////////////////////
     const customer = await prisma.customer.findFirst({
-      where: {
-        id: customerId,
-        businessId: req.business.id,
-      },
+      where: { id: customerId, businessId: req.business.id },
     });
 
     if (!customer) {
-      return res.status(400).json({
-        success: false,
-        message: "Customer not found",
-      });
+      return res.status(400).json({ success: false, message: "Customer not found" });
     }
 
-    //////////////////////////////////////////////////////
-    // VALIDATE ASSIGNED USER
-    //////////////////////////////////////////////////////
-    if (assignedToId) {
-      const member = await prisma.businessUser.findFirst({
-        where: {
-          id: assignedToId,
-          businessId: req.business.id,
-          isActive: true,
-        },
-      });
+    const order = await prisma.$transaction(async (tx) => {
+      let calculatedSubtotal = 0;
+      let totalTaxAmount = 0;
 
-      if (!member) {
-        return res.status(400).json({
-          success: false,
-          message: "Assigned user not part of this business",
+      const mappedItems = [];
+      for (const item of items) {
+        const lineAmount = Number(item.quantity || 0) * Number(item.price || 0);
+        const lineTax = (lineAmount * Number(item.taxPercent || 0)) / 100;
+        
+        calculatedSubtotal += lineAmount;
+        totalTaxAmount += lineTax;
+
+        // Requirement 5: Warehouse-wise stock validation & Reservation
+        if (item.productId && item.warehouseId) {
+          await InventoryService.reserveStock({
+            productId: item.productId,
+            warehouseId: item.warehouseId,
+            quantity: Number(item.quantity),
+            tx
+          });
+        }
+
+        mappedItems.push({
+          productId: item.productId,
+          warehouseId: item.warehouseId,
+          description: item.description || item.name,
+          itemType: item.itemType || item.type || 'GOODS',
+          hsnSacCode: item.hsnSacCode || item.hsn,
+          quantity: Number(item.quantity || 0),
+          price: Number(item.price || 0),
+          taxPercent: Number(item.taxPercent || 0),
+          total: lineAmount + lineTax,
         });
       }
-    }
 
-    //////////////////////////////////////////////////////
-    // CALCULATE TOTAL
-    //////////////////////////////////////////////////////
-    let calculatedSubtotal = 0
-    let totalTaxAmount = 0
+      const finalGrandTotal = calculatedSubtotal + totalTaxAmount - Number(discount || 0);
 
-    const mappedItems = items.map((item) => {
-      const lineAmount = Number(item.quantity || 0) * Number(item.price || 0)
-      const lineTax = (lineAmount * Number(item.taxPercent || 0)) / 100
-      
-      calculatedSubtotal += lineAmount
-      totalTaxAmount += lineTax
-
-      return {
-        description: item.description || item.name,
-        itemType: item.itemType || item.type || 'GOODS',
-        hsnSacCode: item.hsnSacCode || item.hsn,
-        quantity: Number(item.quantity || 0),
-        price: Number(item.price || 0),
-        taxPercent: Number(item.taxPercent || 0),
-        total: lineAmount + lineTax,
-      }
-    })
-
-    const finalGrandTotal = calculatedSubtotal + totalTaxAmount - Number(discount || 0)
-
-    //////////////////////////////////////////////////////
-    // CREATE
-    //////////////////////////////////////////////////////
-    const order = await prisma.salesOrder.create({
-      data: {
-        businessId: req.business.id,
-        orderNumber: await generateOrderNumber(),
-
-        customerId,
-        quotationId,
-        dealId,
-        assignedToId,
-
-        subtotal: calculatedSubtotal,
-        tax: totalTaxAmount,
-        discount: Number(discount || 0),
-        totalAmount: finalGrandTotal,
-
-        orderDate: new Date(orderDate),
-        deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
-
-        notes,
-
-        items: {
-          create: mappedItems,
+      return tx.salesOrder.create({
+        data: {
+          businessId: req.business.id,
+          orderNumber: await generateOrderNumber(req.business.id),
+          customerId,
+          quotationId,
+          dealId,
+          assignedToId,
+          subtotal: calculatedSubtotal,
+          tax: totalTaxAmount,
+          discount: Number(discount || 0),
+          totalAmount: finalGrandTotal,
+          orderDate: new Date(orderDate),
+          deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
+          notes,
+          items: { create: mappedItems },
         },
-      },
-      include: {
-        items: true,
-      },
+        include: { items: true },
+      });
     });
 
-    res.status(201).json({
-      success: true,
-      order,
-    });
+    res.status(201).json({ success: true, order });
 
   } catch (error) {
     console.error("createSalesOrder error:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
