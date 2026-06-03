@@ -42,7 +42,7 @@ class InventoryService {
         grnId: reference.grnId || null,
         referenceNo: reference.referenceNo || null,
         performedBy: String(performedBy),
-        note: note || null
+        notes: note || null
       }
     });
   }
@@ -90,7 +90,7 @@ class InventoryService {
         invoiceId: reference.invoiceId || null,
         referenceNo: reference.referenceNo || null,
         performedBy: String(performedBy),
-        note: note || null
+        notes: note || null
       }
     });
   }

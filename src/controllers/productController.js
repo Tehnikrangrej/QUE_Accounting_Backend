@@ -114,7 +114,8 @@ exports.getProducts = async (req, res) => {
       include: {
         categories: true,
         brands: true,
-        units: true
+        units: true,
+        stock: true
       }
     });
 
@@ -143,6 +144,12 @@ exports.getProductById = async (req, res) => {
         id: req.params.id,
         businessId: req.business.id,
       },
+      include: {
+        categories: true,
+        brands: true,
+        units: true,
+        stock: true
+      }
     });
 
     if (!product) {
@@ -154,7 +161,7 @@ exports.getProductById = async (req, res) => {
 
     res.json({
       success: true,
-      product,
+      product: fixProduct(product),
     });
 
   } catch (error) {
@@ -186,15 +193,31 @@ exports.updateProduct = async (req, res) => {
     //////////////////////////////////////////////////////
     // UPDATE
     //////////////////////////////////////////////////////
+    const allowedFields = [
+      "name", "description", "sku", "price", "costPrice", "taxPercent", 
+      "unit", "isActive", "taxCode", "type", "attachments", "barcode", 
+      "brandId", "categoryId", "image", "isBatchTracking", "isSerialTracking", 
+      "minimumStock", "openingStock", "reorderLevel", "unitId"
+    ];
+
+    const updateData = {};
+    allowedFields.forEach(field => {
+      if (req.body[field] !== undefined) {
+        updateData[field] = req.body[field];
+      }
+    });
+
+    // Map frontend names to backend names if they were missed
+    if (req.body.sellingPrice !== undefined) updateData.price = req.body.sellingPrice;
+    if (req.body.taxRate !== undefined) updateData.taxPercent = req.body.taxRate;
+    if (req.body.hsnCode !== undefined) updateData.taxCode = req.body.hsnCode;
+
     const updated = await prisma.product.updateMany({
       where: {
         id,
         businessId: req.business.id,
       },
-      data: {
-        ...rest,
-        ...(type && { type }),
-      },
+      data: updateData,
     });
 
     if (updated.count === 0) {

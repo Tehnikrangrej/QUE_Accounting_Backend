@@ -72,13 +72,14 @@ exports.createQuotation = async (req, res) => {
       totalTaxAmount += lineTax
 
       return {
-        name: item.name,
-        type: item.type || 'GOODS',
-        hsn: item.hsn,
+        description: item.name || item.description,
+        itemType: item.type || item.itemType || 'GOODS',
+        hsnSacCode: item.hsn || item.hsnSacCode,
         quantity: Number(item.quantity || 0),
         price: Number(item.price || 0),
         taxPercent: Number(item.taxPercent || 0),
         total: lineAmount + lineTax,
+        updatedAt: new Date()
       }
     })
 

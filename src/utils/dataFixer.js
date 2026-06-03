@@ -18,7 +18,9 @@ const fixProduct = (product) => {
     category: product.categories || product.category,
     brand: product.brands || product.brand,
     // Handle unit object or string
-    unitData: product.units || product.unit
+    unitData: product.units || product.unit,
+    // Map stock relation to stockLevels for frontend
+    stockLevels: product.stock || []
   };
 };
 

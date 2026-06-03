@@ -8,6 +8,7 @@ const {
   generateInvoicePdf,
   downloadInvoicePdf,
   bulkUpdateInvoices,
+  createInvoiceFromSalesOrder,
 } = require("../controllers/invoiceController");
 const authMiddleware = require("../middlewares/authMiddleware");
 const businessMiddleware = require("../middlewares/business.middleware");
@@ -28,6 +29,7 @@ router.post("/bulk-update", businessMiddleware, checkBusinessSubscription, check
 
 // Require active subscription for write operations
 router.post("/", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "create"), createInvoice);
+router.post("/convert/:salesOrderId", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "create"), createInvoiceFromSalesOrder);
 router.patch("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), updateInvoice);
 router.delete("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "delete"), deleteInvoice);
 module.exports = router;

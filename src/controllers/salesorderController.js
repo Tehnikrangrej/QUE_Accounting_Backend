@@ -1,7 +1,8 @@
 const prisma = require("../config/prisma");
 const InventoryService = require("../services/inventoryService");
+const TaxEngine = require("../services/taxEngine");
 
-const VALID_STATUS = ["Draft", "Confirmed", "Completed", "Cancelled"];
+const VALID_STATUS = ["DRAFT", "Draft", "CONFIRMED", "Confirmed", "PROCESSING", "Processing", "FULFILLED", "Completed", "CANCELLED", "Cancelled", "APPROVED", "Approved", "PARTIALLY_FULFILLED"];
 
 //////////////////////////////////////////////////////
 // GENERATE ORDER NUMBER
@@ -23,9 +24,29 @@ exports.createSalesOrder = async (req, res) => {
       assignedToId,
       items,
       discount = 0,
+      shippingCharges = 0,
       orderDate,
       deliveryDate,
       notes,
+      termsConditions,
+      currency,
+      customerReference,
+      shippingMethod,
+      paymentTerms,
+      deliveryInstructions,
+      placeOfSupply,
+      // Tax fields
+      cgst,
+      sgst,
+      igst,
+      tds,
+      ewayBillNo,
+      reverseCharge = false,
+      transportDetails,
+      vatPercentage,
+      vatAmount,
+      vatType = "exclusive",
+      emirate
     } = req.body;
 
     if (!customerId || !items || items.length === 0) {
@@ -43,6 +64,10 @@ exports.createSalesOrder = async (req, res) => {
       return res.status(400).json({ success: false, message: "Customer not found" });
     }
 
+    const settings = await prisma.settings.findUnique({
+      where: { businessId: req.business.id },
+    });
+
     const order = await prisma.$transaction(async (tx) => {
       let calculatedSubtotal = 0;
       let totalTaxAmount = 0;
@@ -50,10 +75,26 @@ exports.createSalesOrder = async (req, res) => {
       const mappedItems = [];
       for (const item of items) {
         const lineAmount = Number(item.quantity || 0) * Number(item.price || 0);
-        const lineTax = (lineAmount * Number(item.taxPercent || 0)) / 100;
         
-        calculatedSubtotal += lineAmount;
-        totalTaxAmount += lineTax;
+        // Tax logic (Centralized TaxEngine)
+        const taxResult = TaxEngine.calculateTax({
+          companyCountry: settings?.country || 'UAE',
+          companyState: settings?.state || '',
+          customerCountry: customer.country || 'UAE',
+          customerState: customer.state || '',
+          taxPercent: Number(item.taxPercent || 0),
+          lineSubtotal: lineAmount,
+          vatType: vatType || 'exclusive',
+          manualTax: {
+            cgstRate: item.cgstPercent,
+            sgstRate: item.sgstPercent,
+            igstRate: item.igstPercent
+          }
+        });
+
+        const effectiveSubtotal = taxResult.effectiveSubtotal !== undefined ? taxResult.effectiveSubtotal : lineAmount;
+        calculatedSubtotal += effectiveSubtotal;
+        totalTaxAmount += taxResult.totalTaxAmount;
 
         // Requirement 5: Warehouse-wise stock validation & Reservation
         if (item.productId && item.warehouseId) {
@@ -74,27 +115,51 @@ exports.createSalesOrder = async (req, res) => {
           quantity: Number(item.quantity || 0),
           price: Number(item.price || 0),
           taxPercent: Number(item.taxPercent || 0),
-          total: lineAmount + lineTax,
+          unit: item.unit || 'pcs',
+          total: effectiveSubtotal + taxResult.totalTaxAmount,
+          taxDetails: taxResult.breakdown,
+          updatedAt: new Date()
         });
       }
 
-      const finalGrandTotal = calculatedSubtotal + totalTaxAmount - Number(discount || 0);
+      const finalGrandTotal = calculatedSubtotal + totalTaxAmount + Number(shippingCharges || 0) - Number(discount || 0) - Number(tds || 0);
 
       return tx.salesOrder.create({
         data: {
           businessId: req.business.id,
           orderNumber: await generateOrderNumber(req.business.id),
           customerId,
-          quotationId,
-          dealId,
-          assignedToId,
+          quotationId: quotationId || null,
+          dealId: dealId || null,
+          assignedToId: assignedToId || null,
           subtotal: calculatedSubtotal,
           tax: totalTaxAmount,
           discount: Number(discount || 0),
+          shippingCharges: Number(shippingCharges || 0),
           totalAmount: finalGrandTotal,
           orderDate: new Date(orderDate),
           deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
           notes,
+          termsConditions,
+          currency: currency || customer.currency || settings?.currency || "AED",
+          customerReference,
+          shippingMethod,
+          paymentTerms,
+          deliveryInstructions,
+          placeOfSupply,
+          // India fields
+          cgst: Number(cgst || 0),
+          sgst: Number(sgst || 0),
+          igst: Number(igst || 0),
+          tds: Number(tds || 0),
+          ewayBillNo,
+          reverseCharge: !!reverseCharge,
+          transportDetails,
+          // UAE fields
+          vatPercentage: Number(vatPercentage || 0),
+          vatAmount: Number(vatAmount || 0),
+          vatType,
+          emirate,
           items: { create: mappedItems },
         },
         include: { items: true },
@@ -194,54 +259,148 @@ exports.getSalesOrderById = async (req, res) => {
 exports.updateSalesOrder = async (req, res) => {
   try {
     const { id } = req.params;
+    const {
+      customerId,
+      items,
+      discount = 0,
+      shippingCharges = 0,
+      orderDate,
+      deliveryDate,
+      status,
+      // Tax fields
+      cgst,
+      sgst,
+      igst,
+      tds,
+      ewayBillNo,
+      reverseCharge,
+      transportDetails,
+      vatPercentage,
+      vatAmount,
+      vatType = "exclusive",
+      emirate,
+      ...otherData
+    } = req.body;
 
-    //////////////////////////////////////////////////////
-    // VALIDATE STATUS
-    //////////////////////////////////////////////////////
-    if (req.body.status && !VALID_STATUS.includes(req.body.status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid status",
+    // 1. Check if order exists
+    const existingOrder = await prisma.salesOrder.findFirst({
+      where: { id, businessId: req.business.id },
+      include: { items: true }
+    });
+
+    if (!existingOrder) {
+      return res.status(404).json({ success: false, message: "Sales order not found" });
+    }
+
+    // 2. Normalize status
+    let normalizedStatus = status;
+    if (status) {
+      const statusMap = {
+        'Draft': 'DRAFT',
+        'Confirmed': 'CONFIRMED',
+        'Approved': 'APPROVED',
+        'Partially Fulfilled': 'PARTIALLY_FULFILLED',
+        'Fulfilled': 'FULFILLED',
+        'Cancelled': 'CANCELLED'
+      };
+      normalizedStatus = statusMap[status] || status.toUpperCase();
+    }
+
+    // 3. Recalculate if items are provided
+    const result = await prisma.$transaction(async (tx) => {
+      let finalUpdateData = {
+        ...otherData,
+        discount: Number(discount),
+        shippingCharges: Number(shippingCharges),
+        status: normalizedStatus,
+        orderDate: orderDate ? new Date(orderDate) : undefined,
+        deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
+        cgst: Number(cgst),
+        sgst: Number(sgst),
+        igst: Number(igst),
+        tds: Number(tds),
+        ewayBillNo,
+        reverseCharge: !!reverseCharge,
+        transportDetails,
+        vatPercentage: Number(vatPercentage),
+        vatAmount: Number(vatAmount),
+        vatType,
+        emirate
+      };
+
+      if (items && items.length > 0) {
+        // Fetch customer and settings for calculations
+        const customer = await tx.customer.findFirst({
+          where: { id: customerId || existingOrder.customerId, businessId: req.business.id },
+        });
+        const settings = await tx.settings.findUnique({
+          where: { businessId: req.business.id },
+        });
+
+        let calculatedSubtotal = 0;
+        let totalTaxAmount = 0;
+        const mappedItems = [];
+
+        // Delete existing items
+        await tx.salesOrderItem.deleteMany({ where: { salesOrderId: id } });
+
+        for (const item of items) {
+          const lineAmount = Number(item.quantity || 0) * Number(item.price || 0);
+          
+          const taxResult = TaxEngine.calculateTax({
+            companyCountry: settings?.country || 'UAE',
+            companyState: settings?.state || '',
+            customerCountry: customer.country || 'UAE',
+            customerState: customer.state || '',
+            taxPercent: Number(item.taxPercent || 0),
+            lineSubtotal: lineAmount,
+            vatType: vatType || 'exclusive',
+            manualTax: {
+              cgstRate: item.cgstPercent,
+              sgstRate: item.sgstPercent,
+              igstRate: item.igstPercent
+            }
+          });
+
+          const effectiveSubtotal = taxResult.effectiveSubtotal !== undefined ? taxResult.effectiveSubtotal : lineAmount;
+          calculatedSubtotal += effectiveSubtotal;
+          totalTaxAmount += taxResult.totalTaxAmount;
+
+          mappedItems.push({
+            productId: item.productId,
+            warehouseId: item.warehouseId,
+            description: item.description || item.name,
+            itemType: item.itemType || 'GOODS',
+            hsnSacCode: item.hsnSacCode,
+            quantity: Number(item.quantity || 0),
+            price: Number(item.price || 0),
+            taxPercent: Number(item.taxPercent || 0),
+            unit: item.unit || 'pcs',
+            total: effectiveSubtotal + taxResult.totalTaxAmount,
+            taxDetails: taxResult.breakdown,
+          });
+        }
+
+        const finalGrandTotal = calculatedSubtotal + totalTaxAmount + Number(shippingCharges) - Number(discount) - Number(tds || 0);
+        
+        finalUpdateData.subtotal = calculatedSubtotal;
+        finalUpdateData.tax = totalTaxAmount;
+        finalUpdateData.totalAmount = finalGrandTotal;
+        finalUpdateData.items = { create: mappedItems };
+      }
+
+      return await tx.salesOrder.update({
+        where: { id },
+        data: finalUpdateData,
+        include: { items: true }
       });
-    }
-
-    //////////////////////////////////////////////////////
-    // FORMAT DATE
-    //////////////////////////////////////////////////////
-    if (req.body.orderDate) {
-      req.body.orderDate = new Date(req.body.orderDate);
-    }
-
-    //////////////////////////////////////////////////////
-    // UPDATE
-    //////////////////////////////////////////////////////
-    const order = await prisma.salesOrder.update({
-      where: { id },
-      data: req.body,
-      include: {
-        items: true,
-      },
     });
 
-    res.json({
-      success: true,
-      order,
-    });
+    res.json({ success: true, order: result });
 
   } catch (error) {
     console.error("updateSalesOrder error:", error);
-
-    if (error.code === "P2025") {
-      return res.status(404).json({
-        success: false,
-        message: "Sales order not found",
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 

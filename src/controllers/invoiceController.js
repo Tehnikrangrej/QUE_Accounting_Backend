@@ -25,8 +25,21 @@ exports.createInvoice = async (req, res) => {
       adminNote,
       terms,
       discount = 0,
+      shippingCharges = 0,
       items = [],
       designTemplate = "modern",
+      // New Tax fields
+      cgst,
+      sgst,
+      igst,
+      tds,
+      ewayBillNo,
+      reverseCharge = false,
+      transportDetails,
+      vatPercentage,
+      vatAmount,
+      vatType = "exclusive",
+      emirate
     } = req.body;
 
     if (!invoiceDate) {
@@ -41,7 +54,12 @@ exports.createInvoice = async (req, res) => {
           businessId: req.business.id,
           salesOrderId,
           invoiceNumber,
-          performedBy: req.user.userId
+          performedBy: req.user.userId,
+          // Pass new fields if workflow supports them (will check workflow later)
+          extraData: {
+            cgst, sgst, igst, tds, ewayBillNo, reverseCharge, transportDetails,
+            vatPercentage, vatAmount, vatType, emirate, shippingCharges
+          }
         });
         
         return res.status(201).json({ success: true, data: invoice });
@@ -71,18 +89,25 @@ exports.createInvoice = async (req, res) => {
       const invoiceItems = [];
       for (const item of items) {
         const lineAmount = Number(item.quantity || item.hours || 0) * Number(item.rate || 0);
-        subtotal += lineAmount;
-
-        // Requirement 3: Tax logic (Auto-fetch from TaxEngine)
+        
+        // Tax logic (Auto-fetch from TaxEngine)
         const taxResult = TaxEngine.calculateTax({
           companyCountry: settings?.country || 'UAE',
           companyState: settings?.state || '',
           customerCountry: customer.country || 'UAE',
           customerState: customer.state || '',
           taxPercent: Number(item.taxPercent || 0),
-          lineSubtotal: lineAmount
+          lineSubtotal: lineAmount,
+          vatType: vatType || 'exclusive',
+          manualTax: {
+            cgstRate: item.cgstPercent,
+            sgstRate: item.sgstPercent,
+            igstRate: item.igstPercent
+          }
         });
 
+        const effectiveSubtotal = taxResult.effectiveSubtotal !== undefined ? taxResult.effectiveSubtotal : lineAmount;
+        subtotal += effectiveSubtotal;
         totalTax += taxResult.totalTaxAmount;
 
         invoiceItems.push({
@@ -91,16 +116,18 @@ exports.createInvoice = async (req, res) => {
           description: item.description,
           hsnSacCode: item.hsnSacCode || item.taxCode || null,
           itemType: item.itemType || 'GOODS',
+          unit: item.unit || null,
           hours: Number(item.hours || item.quantity),
           quantity: Number(item.quantity || item.hours),
           rate: Number(item.rate),
-          amount: lineAmount,
+          amount: effectiveSubtotal,
           taxDetails: taxResult.breakdown,
           totalTax: taxResult.totalTaxAmount,
-          totalAmount: lineAmount + taxResult.totalTaxAmount,
+          totalAmount: effectiveSubtotal + taxResult.totalTaxAmount,
+          discount: Number(item.discount || 0)
         });
 
-        // Requirement 4: Automatic Stock Decrease for direct invoices
+        // Automatic Stock Decrease for direct invoices
         if (item.productId && item.warehouseId) {
           await InventoryService.decreaseStock({
             businessId: req.business.id,
@@ -115,7 +142,9 @@ exports.createInvoice = async (req, res) => {
         }
       }
 
-      const grandTotal = subtotal + totalTax - Number(discount);
+      // Final Grand Total calculation
+      // Grand Total = Subtotal + Total Tax + Shipping - Discount - TDS
+      const grandTotal = subtotal + totalTax + Number(shippingCharges) - Number(discount) - Number(tds || 0);
 
       return tx.invoice.create({
         data: {
@@ -135,7 +164,21 @@ exports.createInvoice = async (req, res) => {
           subtotal,
           totalTax,
           discount,
+          shippingCharges: Number(shippingCharges),
           grandTotal,
+          // India fields
+          cgst: Number(cgst || 0),
+          sgst: Number(sgst || 0),
+          igst: Number(igst || 0),
+          tds: Number(tds || 0),
+          ewayBillNo,
+          reverseCharge: !!reverseCharge,
+          transportDetails,
+          // UAE fields
+          vatPercentage: Number(vatPercentage || 0),
+          vatAmount: Number(vatAmount || 0),
+          vatType,
+          emirate,
           items: { create: invoiceItems },
         },
         include: { 
@@ -166,6 +209,35 @@ exports.createInvoice = async (req, res) => {
   } catch (err) {
     console.error("createInvoice error:", err);
     res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+//////////////////////////////////////////////////////
+// CONVERT FROM SALES ORDER
+//////////////////////////////////////////////////////
+exports.createInvoiceFromSalesOrder = async (req, res) => {
+  try {
+    const { salesOrderId } = req.params;
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
+
+    const invoiceNumber = await generateInvoiceNumber(businessId);
+    
+    const invoice = await InvoiceWorkflow.createInvoiceFromSalesOrder({
+      businessId,
+      salesOrderId,
+      invoiceNumber,
+      performedBy: userId
+    });
+
+    res.status(201).json({ 
+      success: true, 
+      message: "Invoice generated from Sales Order successfully.",
+      data: invoice 
+    });
+  } catch (error) {
+    console.error("createInvoiceFromSalesOrder error:", error);
+    res.status(400).json({ success: false, message: error.message });
   }
 };
 

@@ -7,7 +7,7 @@ class InvoiceWorkflow {
    * (Records only item description/name, HSN/SAC code, qty, and rate - excluding taxes)
    */
   static async createInvoiceFromSalesOrder(params) {
-    const { businessId, salesOrderId, invoiceNumber, performedBy } = params;
+    const { businessId, salesOrderId, invoiceNumber, performedBy, extraData = {} } = params;
 
     return await prisma.$transaction(async (tx) => {
       // 1. Fetch Sales Order with its items and products
@@ -53,7 +53,8 @@ class InvoiceWorkflow {
           amount: itemSubtotal, // pre-tax total amount
           taxPercent: taxRate,
           totalTax: itemTax,
-          totalAmount: itemSubtotal + itemTax
+          totalAmount: itemSubtotal + itemTax,
+          unit: item.unit || null
         });
       }
 
@@ -66,8 +67,20 @@ class InvoiceWorkflow {
           invoiceNumber,
           subtotal: invoiceSubtotal,
           totalTax: invoiceTotalTax,
-          grandTotal: invoiceSubtotal + invoiceTotalTax,
+          grandTotal: invoiceSubtotal + invoiceTotalTax + Number(extraData.shippingCharges || 0) - Number(extraData.tds || 0),
           status: "UNPAID",
+          shippingCharges: Number(extraData.shippingCharges || 0),
+          cgst: Number(extraData.cgst || 0),
+          sgst: Number(extraData.sgst || 0),
+          igst: Number(extraData.igst || 0),
+          tds: Number(extraData.tds || 0),
+          ewayBillNo: extraData.ewayBillNo,
+          reverseCharge: !!extraData.reverseCharge,
+          transportDetails: extraData.transportDetails,
+          vatPercentage: Number(extraData.vatPercentage || 0),
+          vatAmount: Number(extraData.vatAmount || 0),
+          vatType: extraData.vatType,
+          emirate: extraData.emirate,
           items: {
             create: invoiceItemsData
           }

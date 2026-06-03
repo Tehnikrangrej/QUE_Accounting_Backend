@@ -34,6 +34,14 @@ router.put(
   Controller.updateSalesOrder
 );
 
+router.post(
+  "/:id/status",
+  auth,
+  business,
+  checkPermission("sales_order", "update"),
+  Controller.updateSalesOrder
+);
+
 router.delete(
   "/:id",
   auth,

@@ -218,6 +218,10 @@ model Customer {
   zipCode            String?
   leadId             String?              @unique
   region             Region
+  emirate            String?
+  tax_number         String?
+  gst_number         String?
+  trn_number         String?
   accountOwnerId     String?
   accountType        CrmAccountType?
   annualRevenue      Float?
@@ -287,6 +291,22 @@ model Invoice {
   soDate          DateTime?
   soNumber        String?
   contactId       String?
+  
+  // India specific fields
+  cgst            Float?
+  sgst            Float?
+  igst            Float?
+  tds             Float?
+  ewayBillNo      String?
+  reverseCharge   Boolean          @default(false)
+  transportDetails String?
+
+  // UAE specific fields
+  vatPercentage   Float?
+  vatAmount       Float?
+  vatType         String?          // "inclusive" or "exclusive"
+  emirate         String?
+
   deletedAt       DateTime?
   isDeleted       Boolean          @default(false)
   quotationId     String?
@@ -319,6 +339,7 @@ model InvoiceItem {
   totalTax    Float      @default(0)
   hsnSacCode  String?
   itemType    String?
+  unit        String?
   discount    Float      @default(0)
   productId   String?
   warehouseId String?
@@ -660,7 +681,7 @@ model Contract {
   isHidden    Boolean        @default(false)
   status      ContractStatus @default(ACTIVE)
   createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  updatedAt   DateTime  @updatedAt       
   typeId      String?
   business    Business       @relation(fields: [businessId], references: [id])
   customer    Customer       @relation(fields: [customerId], references: [id])
@@ -913,6 +934,30 @@ model Quotation {
   updatedAt       DateTime         @updatedAt
   contactId       String?
   currency        String           @default("INR")
+  
+  // India specific fields
+  cgst            Float?
+  sgst            Float?
+  igst            Float?
+  tds             Float?
+  ewayBillNo      String?
+  reverseCharge   Boolean          @default(false)
+  transportDetails String?
+  placeOfSupply   String?
+
+  // UAE specific fields
+  vatPercentage   Float?
+  vatAmount       Float?
+  vatType         String?          // "inclusive" or "exclusive"
+  emirate         String?
+
+  // General ERP fields
+  customerReference String?
+  shippingMethod    String?
+  paymentTerms      String?
+  deliveryInstructions String?
+  shippingCharges   Float?           @default(0)
+
   deletedAt       DateTime?
   isDeleted       Boolean          @default(false)
   termsConditions String?
@@ -948,7 +993,7 @@ model QuotationItem {
   discount    Float?    @default(0)
   productId   String?
   taxDetails  Json?
-  updatedAt   DateTime
+  updatedAt   DateTime  @updatedAt
   Product     Product?  @relation(fields: [productId], references: [id])
   quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 }
@@ -1014,11 +1059,12 @@ model SalesOrderItem {
   hsnSacCode   String?
   itemType     String?    @default("GOODS")
   taxPercent   Float?     @default(0)
+  unit         String?
   createdAt    DateTime   @default(now())
   discount     Float?     @default(0)
   productId    String?
   taxDetails   Json?
-  updatedAt    DateTime
+  updatedAt    DateTime   @updatedAt
   warehouseId  String?
   product      Product?   @relation(fields: [productId], references: [id])
   salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
@@ -1283,20 +1329,27 @@ model TimeEntry {
 }
 
 model StockMovement {
-  id            String            @id @default(uuid())
-  businessId    String
-  productId     String
-  warehouseId   String
-  quantity      Float
-  type          StockMovementType
-  referenceType String?
-  referenceId   String?
-  performedBy   String?
-  notes         String?
-  createdAt     DateTime          @default(now())
-  business      Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  product       Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
-  warehouse     Warehouse         @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  id              String            @id @default(uuid())
+  businessId      String
+  productId       String
+  warehouseId     String
+  quantity        Float
+  type            StockMovementType
+  balanceAfter    Float?
+  referenceType   String?
+  referenceId     String?
+  referenceNo     String?
+  purchaseOrderId String?
+  billId          String?
+  grnId           String?
+  salesOrderId    String?
+  invoiceId       String?
+  performedBy     String?
+  notes           String?
+  createdAt       DateTime          @default(now())
+  business        Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  product         Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse       Warehouse         @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
   @@index([businessId])
   @@index([productId])
@@ -1548,7 +1601,7 @@ model brands {
   description String?
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
-  updatedAt   DateTime
+  updatedAt   DateTime  @updatedAt
   Product     Product[]
   businesses  Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
@@ -1563,7 +1616,7 @@ model categories {
   parentId         String?
   isActive         Boolean      @default(true)
   createdAt        DateTime     @default(now())
-  updatedAt        DateTime
+  updatedAt        DateTime     @updatedAt
   Product          Product[]
   businesses       Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
   categories       categories?  @relation("categoriesTocategories", fields: [parentId], references: [id])
@@ -1650,7 +1703,7 @@ model purchase_requests {
   status                 PurchaseRequestStatus    @default(DRAFT)
   notes                  String?
   createdAt              DateTime                 @default(now())
-  updatedAt              DateTime
+  updatedAt              DateTime                 @updatedAt
   purchase_request_items purchase_request_items[]
   businesses             Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
   business_users         BusinessUser?            @relation(fields: [requesterId], references: [id])
@@ -1757,7 +1810,7 @@ model sales_return_items {
   warehouseId     String?
   isStockReturned Boolean       @default(false)
   createdAt       DateTime      @default(now())
-  updatedAt       DateTime
+  updatedAt       DateTime      @updatedAt
   Product         Product?      @relation(fields: [productId], references: [id])
   sales_returns   sales_returns @relation(fields: [salesReturnId], references: [id], onDelete: Cascade)
   Warehouse       Warehouse?    @relation(fields: [warehouseId], references: [id])
@@ -1832,7 +1885,7 @@ model stock_adjustments {
   adjustmentDate         DateTime                 @default(now())
   notes                  String?
   createdAt              DateTime                 @default(now())
-  updatedAt              DateTime
+  updatedAt              DateTime                 @updatedAt
   stock_adjustment_items stock_adjustment_items[]
   businesses             Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
   Warehouse              Warehouse                @relation(fields: [warehouseId], references: [id])
@@ -1862,7 +1915,7 @@ model stock_transfers {
   transferDate                                         DateTime               @default(now())
   notes                                                String?
   createdAt                                            DateTime               @default(now())
-  updatedAt                                            DateTime
+  updatedAt                                            DateTime               @updatedAt
   stock_transfer_items                                 stock_transfer_items[]
   businesses                                           Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
   Warehouse_stock_transfers_fromWarehouseIdToWarehouse Warehouse              @relation("stock_transfers_fromWarehouseIdToWarehouse", fields: [fromWarehouseId], references: [id])
@@ -1879,7 +1932,7 @@ model units {
   description String?
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
-  updatedAt   DateTime
+  updatedAt   DateTime  @updatedAt
   Product     Product[]
   businesses  Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
