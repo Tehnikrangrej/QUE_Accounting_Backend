@@ -1,3 +1,6 @@
+const invoiceService = require("../services/sales/invoice.service");
+const { createInvoiceSchema, updateInvoiceSchema } = require("../validations/sales.validation");
+const { successResponse, errorResponse } = require("../utils/response");
 const prisma = require("../config/prisma");
 const generateInvoicePdfHelper = require("../utils/generateInvoicePdf");
 const uploadInvoicePdf = require("../utils/uploadInvoicePdf");
@@ -6,9 +9,6 @@ const InventoryService = require("../services/inventoryService");
 const TaxEngine = require("../services/taxEngine");
 const InvoiceWorkflow = require("../services/invoiceWorkflow");
 
-//////////////////////////////////////////////////////
-// CREATE INVOICE
-//////////////////////////////////////////////////////
 exports.createInvoice = async (req, res) => {
   console.log("=== CREATE INVOICE CALLED ===");
   try {
@@ -28,7 +28,7 @@ exports.createInvoice = async (req, res) => {
       shippingCharges = 0,
       items = [],
       designTemplate = "modern",
-      // New Tax fields
+      // Tax fields
       cgst,
       sgst,
       igst,
@@ -42,10 +42,6 @@ exports.createInvoice = async (req, res) => {
       emirate
     } = req.body;
 
-    if (!invoiceDate) {
-      return res.status(400).json({ success: false, message: "invoiceDate is required" });
-    }
-
     // 1. If salesOrderId is provided, use workflow for strict ERP consistency
     if (salesOrderId) {
       try {
@@ -55,13 +51,11 @@ exports.createInvoice = async (req, res) => {
           salesOrderId,
           invoiceNumber,
           performedBy: req.user.userId,
-          // Pass new fields if workflow supports them (will check workflow later)
           extraData: {
             cgst, sgst, igst, tds, ewayBillNo, reverseCharge, transportDetails,
             vatPercentage, vatAmount, vatType, emirate, shippingCharges
           }
         });
-        
         return res.status(201).json({ success: true, data: invoice });
       } catch (workflowErr) {
         return res.status(400).json({ success: false, message: workflowErr.message });
@@ -89,8 +83,7 @@ exports.createInvoice = async (req, res) => {
       const invoiceItems = [];
       for (const item of items) {
         const lineAmount = Number(item.quantity || item.hours || 0) * Number(item.rate || 0);
-        
-        // Tax logic (Auto-fetch from TaxEngine)
+
         const taxResult = TaxEngine.calculateTax({
           companyCountry: settings?.country || 'UAE',
           companyState: settings?.state || '',
@@ -128,7 +121,6 @@ exports.createInvoice = async (req, res) => {
           discount: Number(item.discount || 0)
         });
 
-        // Automatic Stock Decrease for direct invoices
         if (item.productId && item.warehouseId) {
           await InventoryService.decreaseStock({
             businessId: req.business.id,
@@ -143,8 +135,6 @@ exports.createInvoice = async (req, res) => {
         }
       }
 
-      // Final Grand Total calculation
-      // Grand Total = Subtotal + Total Tax + Shipping - Discount - TDS
       const grandTotal = subtotal + totalTax + Number(shippingCharges) - Number(discount) - Number(tds || 0);
 
       return tx.invoice.create({
@@ -167,7 +157,6 @@ exports.createInvoice = async (req, res) => {
           discount,
           shippingCharges: Number(shippingCharges),
           grandTotal,
-          // India fields
           cgst: Number(cgst || 0),
           sgst: Number(sgst || 0),
           igst: Number(igst || 0),
@@ -175,18 +164,15 @@ exports.createInvoice = async (req, res) => {
           ewayBillNo,
           reverseCharge: !!reverseCharge,
           transportDetails,
-          // UAE fields
           vatPercentage: Number(vatPercentage || 0),
           vatAmount: Number(vatAmount || 0),
           vatType,
           emirate,
           items: { create: invoiceItems },
         },
-        include: { 
-          customer: true, 
-          items: {
-            include: { warehouse: true }
-          }
+        include: {
+          customer: true,
+          items: { include: { warehouse: true } }
         },
       });
     }, {
@@ -226,7 +212,7 @@ exports.createInvoiceFromSalesOrder = async (req, res) => {
     const userId = req.user.userId || req.user.id;
 
     const invoiceNumber = await generateInvoiceNumber(businessId);
-    
+
     const invoice = await InvoiceWorkflow.createInvoiceFromSalesOrder({
       businessId,
       salesOrderId,
@@ -234,10 +220,10 @@ exports.createInvoiceFromSalesOrder = async (req, res) => {
       performedBy: userId
     });
 
-    res.status(201).json({ 
-      success: true, 
+    res.status(201).json({
+      success: true,
       message: "Invoice generated from Sales Order successfully.",
-      data: invoice 
+      data: invoice
     });
   } catch (error) {
     console.error("createInvoiceFromSalesOrder error:", error);
@@ -246,18 +232,63 @@ exports.createInvoiceFromSalesOrder = async (req, res) => {
 };
 
 //////////////////////////////////////////////////////
+// CONVERT SALES ORDER (service-layer variant)
+//////////////////////////////////////////////////////
+exports.convertSalesOrder = async (req, res) => {
+  try {
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
+    const userEmail = req.user.email;
+    const { salesOrderId } = req.params;
+
+    let invoice = await invoiceService.convertSalesOrderToInvoice(businessId, userId, userEmail, salesOrderId);
+
+    try {
+      const settings = await prisma.settings.findUnique({ where: { businessId } });
+      const pdfSettings = settings || { companyName: "Your Company", signatureUrl: null };
+      const pdfBuffer = await generateInvoicePdfHelper(invoice, pdfSettings);
+      if (pdfBuffer) {
+        const pdfUrl = await uploadInvoicePdf(pdfBuffer, invoice.invoiceNumber);
+        invoice = await prisma.invoice.update({
+          where: { id: invoice.id },
+          data: { pdfUrl },
+          include: { customer: true, items: true }
+        });
+      }
+    } catch (pdfError) {
+      console.error("PDF generation failed on sales order conversion:", pdfError);
+    }
+
+    return successResponse(res, invoice, "Sales Order billed to Invoice successfully", 201);
+  } catch (error) {
+    console.error("convertSalesOrder controller error:", error);
+    return errorResponse(res, error.message, 400);
+  }
+};
+
+//////////////////////////////////////////////////////
 // GET ALL
 //////////////////////////////////////////////////////
 exports.getInvoices = async (req, res) => {
   try {
+    const businessId = req.business.id;
+    const { customerId, status } = req.query;
+
     const data = await prisma.invoice.findMany({
-      where: { businessId: req.business.id },
+      where: {
+        businessId,
+        isDeleted: false,
+        customerId: customerId || undefined,
+        status: status || undefined
+      },
       include: { customer: true, items: true },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: "desc" }
     });
-    res.json({ success: true, data });
+
+    return successResponse(res, data, "Invoices fetched successfully");
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error("getInvoices controller error:", err);
+    return errorResponse(res, err.message, 500);
   }
 };
 
@@ -266,16 +297,14 @@ exports.getInvoices = async (req, res) => {
 //////////////////////////////////////////////////////
 exports.getInvoiceById = async (req, res) => {
   try {
-    const data = await prisma.invoice.findFirst({
-      where: { id: req.params.id, businessId: req.business.id },
-      include: { customer: true, items: true },
-    });
+    const businessId = req.business.id;
+    const { id } = req.params;
 
-    if (!data) return res.status(404).json({ success: false, message: "Invoice not found" });
-
-    res.json({ success: true, data });
+    const invoice = await invoiceService.getInvoiceById(businessId, id);
+    return successResponse(res, invoice, "Invoice retrieved successfully");
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error("getInvoiceById controller error:", err);
+    return errorResponse(res, err.message, 404);
   }
 };
 
@@ -285,8 +314,8 @@ exports.getInvoiceById = async (req, res) => {
 exports.updateInvoice = async (req, res) => {
   try {
     const invoiceId = req.params.id;
-    const { 
-      items = [], 
+    const {
+      items = [],
       discount = 0,
       invoiceDate,
       dueDate,
@@ -300,7 +329,6 @@ exports.updateInvoice = async (req, res) => {
       designTemplate,
       shippingCharges = 0,
       status,
-      // India fields
       cgst,
       sgst,
       igst,
@@ -308,7 +336,6 @@ exports.updateInvoice = async (req, res) => {
       ewayBillNo,
       reverseCharge,
       transportDetails,
-      // UAE fields
       vatPercentage,
       vatAmount,
       vatType,
@@ -323,7 +350,6 @@ exports.updateInvoice = async (req, res) => {
       subtotal += amount;
 
       const taxes = i.taxes || [];
-
       const taxDetails = taxes.map(t => ({
         name: t.name,
         rate: Number(t.rate),
@@ -333,7 +359,6 @@ exports.updateInvoice = async (req, res) => {
       const itemTax = taxDetails.reduce((sum, t) => sum + t.amount, 0);
       totalTax += itemTax;
 
-      // Determine if item is service or goods
       const isService = i.description && (
         i.description.toLowerCase().includes('service') ||
         i.description.toLowerCase().includes('consulting') ||
@@ -361,7 +386,7 @@ exports.updateInvoice = async (req, res) => {
     const updatedInvoice = await prisma.$transaction(async (tx) => {
       await tx.invoiceItem.deleteMany({ where: { invoiceId } });
       await tx.invoiceItem.createMany({ data: newItems });
-      
+
       return tx.invoice.update({
         where: { id: invoiceId },
         data: {
@@ -397,34 +422,31 @@ exports.updateInvoice = async (req, res) => {
       });
     });
 
-    // REGENERATE PDF
+    // Regenerate PDF
     try {
       const settings = await prisma.settings.findUnique({
         where: { businessId: req.business.id },
       });
-
-      const pdfSettings = settings || {
-        companyName: "Your Company",
-        signatureUrl: null
-      };
-
+      const pdfSettings = settings || { companyName: "Your Company", signatureUrl: null };
       const pdfBuffer = await generateInvoicePdfHelper(updatedInvoice, pdfSettings);
       if (pdfBuffer) {
         const pdfUrl = await uploadInvoicePdf(pdfBuffer, updatedInvoice.invoiceNumber);
         await prisma.invoice.update({
-          where: { id: invoiceId },
-          data: { pdfUrl },
+          where: { id: updatedInvoice.id },
+          data: { pdfUrl }
         });
       }
-    } catch (pdfErr) {
-      console.error("PDF Regeneration failed during update:", pdfErr);
+    } catch (pdfError) {
+      console.error("PDF regeneration failed on update:", pdfError);
     }
 
-    res.json({ success: true, data: updatedInvoice });
-
-  } catch (err) {
-    console.error("updateInvoice error:", err);
-    res.status(500).json({ success: false, message: err.message });
+    return successResponse(res, updatedInvoice, "Invoice updated successfully");
+  } catch (error) {
+    console.error("updateInvoice controller error:", error);
+    if (error.name === "ZodError") {
+      return errorResponse(res, error.errors[0].message, 400, error.errors);
+    }
+    return errorResponse(res, error.message, 400);
   }
 };
 
@@ -433,27 +455,26 @@ exports.updateInvoice = async (req, res) => {
 //////////////////////////////////////////////////////
 exports.deleteInvoice = async (req, res) => {
   try {
-    const id = req.params.id;
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
+    const userEmail = req.user.email;
+    const { id } = req.params;
 
-    await prisma.$transaction([
-      prisma.invoiceItem.deleteMany({ where: { invoiceId: id } }),
-      prisma.invoice.delete({ where: { id } }),
-    ]);
-
-    res.json({ success: true, message: "Invoice deleted successfully" });
+    await invoiceService.deleteInvoice(businessId, userId, userEmail, id);
+    return successResponse(res, null, "Invoice deleted and stock restored successfully");
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error("deleteInvoice controller error:", err);
+    return errorResponse(res, err.message, 400);
   }
 };
 
 //////////////////////////////////////////////////////
-// GENERATE PDF (MANUAL)
+// PREVIEW INVOICE (HTML)
 //////////////////////////////////////////////////////
 exports.previewInvoice = async (req, res) => {
   try {
     const { designTemplate, customerId, items, ...rest } = req.body;
-    
-    // Fetch customer and settings for real data
+
     const customer = await prisma.customer.findFirst({
       where: { id: customerId, businessId: req.business.id },
     });
@@ -462,7 +483,6 @@ exports.previewInvoice = async (req, res) => {
       where: { businessId: req.business.id },
     });
 
-    // Mock an invoice object for the template
     const mockInvoice = {
       ...rest,
       designTemplate: designTemplate || "modern",
@@ -470,7 +490,7 @@ exports.previewInvoice = async (req, res) => {
       items: (items || []).map(it => ({
         ...it,
         totalAmount: Number(it.quantity || 0) * Number(it.rate || 0),
-        taxDetails: [] // Simplified for preview
+        taxDetails: []
       }))
     };
 
@@ -481,119 +501,65 @@ exports.previewInvoice = async (req, res) => {
   }
 };
 
+//////////////////////////////////////////////////////
+// GENERATE PDF (MANUAL)
+//////////////////////////////////////////////////////
 exports.generateInvoicePdf = async (req, res) => {
   try {
     const { id } = req.params;
+    const businessId = req.business.id;
+
     const invoice = await prisma.invoice.findFirst({
-      where: { id, businessId: req.business.id },
-      include: { customer: true, items: true },
+      where: { id, businessId, isDeleted: false },
+      include: { customer: true, items: true }
     });
 
     if (!invoice) {
-      return res.status(404).json({ success: false, message: "Invoice not found" });
+      return errorResponse(res, "Invoice not found", 404);
     }
 
-    const settings = await prisma.settings.findUnique({
-      where: { businessId: req.business.id },
-    });
-
-    const pdfSettings = settings || {
-      companyName: "Your Company",
-      companyLogo: null,
-      companyAddress: "Your Address",
-      companyPhone: "Your Phone",
-      companyEmail: "your@email.com",
-      website: "yourwebsite.com",
-      taxNumber: "Your Tax Number",
-      bankName: "Your Bank",
-      accountName: "Your Account Name",
-      iban: "Your IBAN",
-      swiftCode: "Your SWIFT",
-      signatureUrl: null
-    };
+    const settings = await prisma.settings.findUnique({ where: { businessId } });
+    const pdfSettings = settings || { companyName: "Your Company", signatureUrl: null };
 
     const pdfBuffer = await generateInvoicePdfHelper(invoice, pdfSettings);
-    
     if (!pdfBuffer) {
-       return res.status(500).json({ success: false, message: "Failed to generate PDF buffer" });
+      return errorResponse(res, "Failed to generate PDF buffer", 500);
     }
 
     const pdfUrl = await uploadInvoicePdf(pdfBuffer, invoice.invoiceNumber);
-
     const updatedInvoice = await prisma.invoice.update({
       where: { id: invoice.id },
       data: { pdfUrl },
-      include: { customer: true, items: true },
+      include: { customer: true, items: true }
     });
 
-    res.json({ success: true, data: { pdfUrl: updatedInvoice.pdfUrl } });
+    return successResponse(res, { pdfUrl: updatedInvoice.pdfUrl }, "PDF generated successfully");
   } catch (err) {
-    console.error("generateInvoicePdf error:", err);
-    res.status(500).json({ success: false, message: err.message });
+    console.error("generateInvoicePdf controller error:", err);
+    return errorResponse(res, err.message, 500);
   }
 };
 
 //////////////////////////////////////////////////////
-// BULK UPDATE (SYNC OLD RECORDS)
+// CHANGE STATUS
 //////////////////////////////////////////////////////
-exports.bulkUpdateInvoices = async (req, res) => {
-  console.log("=== BULK UPDATE INVOICES CALLED ===");
+exports.changeStatus = async (req, res) => {
   try {
     const businessId = req.business.id;
-    
-    // Fetch settings for this business
-    const settings = await prisma.settings.findUnique({
-      where: { businessId },
-    });
+    const userId = req.user.userId || req.user.id;
+    const userEmail = req.user.email;
+    const { id } = req.params;
+    const { status } = req.body;
 
-    const pdfSettings = settings || {
-      companyName: "Your Company",
-      signatureUrl: null
-    };
-
-    // Fetch all invoices for this business
-    const invoices = await prisma.invoice.findMany({
-      where: { businessId },
-      include: { customer: true, items: true },
-    });
-
-    console.log(`Syncing ${invoices.length} invoices for business ${businessId}...`);
-
-    let updatedCount = 0;
-    for (const inv of invoices) {
-      // 1. Fix missing currency
-      const finalCurrency = inv.currency || settings?.currency || "AED";
-      
-      // 2. Regenerate PDF with new template (includes signature/bank details)
-      try {
-        // Ensure the invoice object has the latest currency for the template
-        inv.currency = finalCurrency;
-        
-        const pdfBuffer = await generateInvoicePdfHelper(inv, pdfSettings);
-        if (pdfBuffer) {
-          const pdfUrl = await uploadInvoicePdf(pdfBuffer, inv.invoiceNumber);
-          
-          await prisma.invoice.update({
-            where: { id: inv.id },
-            data: { 
-              currency: finalCurrency,
-              pdfUrl 
-            },
-          });
-          updatedCount++;
-        }
-      } catch (pdfErr) {
-        console.error(`Failed to sync PDF for invoice ${inv.invoiceNumber}:`, pdfErr);
-      }
+    if (!status) {
+      return errorResponse(res, "Status is required", 400);
     }
 
-    res.json({ 
-      success: true, 
-      message: `Successfully synced ${updatedCount} out of ${invoices.length} invoices.` 
-    });
-  } catch (err) {
-    console.error("bulkUpdateInvoices error:", err);
-    res.status(500).json({ success: false, message: err.message });
+    const invoice = await invoiceService.changeStatus(businessId, userId, userEmail, id, status);
+    return successResponse(res, invoice, "Invoice status updated successfully");
+  } catch (error) {
+    console.error("changeStatus controller error:", error);
+    return errorResponse(res, error.message, 400);
   }
 };
 
@@ -602,16 +568,57 @@ exports.bulkUpdateInvoices = async (req, res) => {
 //////////////////////////////////////////////////////
 exports.downloadInvoicePdf = async (req, res) => {
   try {
-    const invoice = await prisma.invoice.findFirst({
-      where: { id: req.params.id, businessId: req.business.id },
-    });
+    const businessId = req.business.id;
+    const { id } = req.params;
+
+    const invoice = await prisma.invoice.findFirst({ where: { id, businessId } });
 
     if (!invoice?.pdfUrl) {
       return res.status(404).json({ success: false, message: "PDF not found" });
     }
 
-    res.redirect(invoice.pdfUrl);
+    return res.redirect(invoice.pdfUrl);
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error("downloadInvoicePdf controller error:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+//////////////////////////////////////////////////////
+// BULK UPDATE INVOICES (Regenerate PDFs)
+//////////////////////////////////////////////////////
+exports.bulkUpdateInvoices = async (req, res) => {
+  try {
+    const businessId = req.business.id;
+
+    const settings = await prisma.settings.findUnique({ where: { businessId } });
+    const pdfSettings = settings || { companyName: "Your Company", signatureUrl: null };
+
+    const invoices = await prisma.invoice.findMany({
+      where: { businessId, isDeleted: false },
+      include: { customer: true, items: true }
+    });
+
+    let updatedCount = 0;
+    for (const inv of invoices) {
+      try {
+        const pdfBuffer = await generateInvoicePdfHelper(inv, pdfSettings);
+        if (pdfBuffer) {
+          const pdfUrl = await uploadInvoicePdf(pdfBuffer, inv.invoiceNumber);
+          await prisma.invoice.update({
+            where: { id: inv.id },
+            data: { pdfUrl }
+          });
+          updatedCount++;
+        }
+      } catch (pdfErr) {
+        console.error(`Failed to sync PDF for invoice ${inv.invoiceNumber}:`, pdfErr);
+      }
+    }
+
+    return successResponse(res, { updatedCount, totalCount: invoices.length }, "Invoices bulk updated successfully");
+  } catch (err) {
+    console.error("bulkUpdateInvoices controller error:", err);
+    return errorResponse(res, err.message, 500);
   }
 };

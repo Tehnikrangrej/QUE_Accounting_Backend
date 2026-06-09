@@ -1,6 +1,9 @@
 const prisma = require("../config/prisma");
 const InventoryService = require("../services/inventoryService");
 const TaxEngine = require("../services/taxEngine");
+const salesOrderService = require("../services/sales/salesOrder.service");
+const { createSalesOrderSchema, updateSalesOrderSchema } = require("../validations/sales.validation");
+const { successResponse, errorResponse } = require("../utils/response");
 
 const VALID_STATUS = ["DRAFT", "Draft", "CONFIRMED", "Confirmed", "PROCESSING", "Processing", "FULFILLED", "Completed", "INVOICED", "Invoiced", "CANCELLED", "Cancelled", "APPROVED", "Approved", "PARTIALLY_FULFILLED"];
 
@@ -14,6 +17,8 @@ const generateOrderNumber = async (businessId) => {
 
 //////////////////////////////////////////////////////
 // CREATE SALES ORDER
+// Keeps HEAD's rich direct-DB logic (TaxEngine + InventoryService stock reservation)
+// The service-layer variant is available via salesOrderService.createSalesOrder
 //////////////////////////////////////////////////////
 exports.createSalesOrder = async (req, res) => {
   try {
@@ -75,8 +80,7 @@ exports.createSalesOrder = async (req, res) => {
       const mappedItems = [];
       for (const item of items) {
         const lineAmount = Number(item.quantity || 0) * Number(item.price || 0);
-        
-        // Tax logic (Centralized TaxEngine)
+
         const taxResult = TaxEngine.calculateTax({
           companyCountry: settings?.country || 'UAE',
           companyState: settings?.state || '',
@@ -96,7 +100,7 @@ exports.createSalesOrder = async (req, res) => {
         calculatedSubtotal += effectiveSubtotal;
         totalTaxAmount += taxResult.totalTaxAmount;
 
-        // Requirement 5: Warehouse-wise stock validation & Reservation
+        // Warehouse-wise stock validation & Reservation
         if (item.productId && item.warehouseId) {
           await InventoryService.reserveStock({
             productId: item.productId,
@@ -166,11 +170,32 @@ exports.createSalesOrder = async (req, res) => {
       });
     });
 
-    res.status(201).json({ success: true, order });
-
+    return successResponse(res, order, "Sales Order created successfully and stock reserved", 201);
   } catch (error) {
     console.error("createSalesOrder error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    if (error.name === "ZodError") {
+      return errorResponse(res, error.errors[0].message, 400, error.errors);
+    }
+    return errorResponse(res, error.message, 400);
+  }
+};
+
+//////////////////////////////////////////////////////
+// CONVERT QUOTATION TO SALES ORDER
+//////////////////////////////////////////////////////
+exports.convertQuotation = async (req, res) => {
+  try {
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
+    const userEmail = req.user.email;
+    const { quotationId } = req.params;
+
+    const order = await salesOrderService.convertQuotationToSalesOrder(businessId, userId, userEmail, quotationId);
+
+    return successResponse(res, order, "Quotation converted to Sales Order successfully", 201);
+  } catch (error) {
+    console.error("convertQuotation controller error:", error);
+    return errorResponse(res, error.message, 400);
   }
 };
 
@@ -179,85 +204,54 @@ exports.createSalesOrder = async (req, res) => {
 //////////////////////////////////////////////////////
 exports.getSalesOrders = async (req, res) => {
   try {
+    const businessId = req.business.id;
+    const { customerId, status } = req.query;
+
     const orders = await prisma.salesOrder.findMany({
       where: {
-        businessId: req.business.id,
+        businessId,
+        isDeleted: false,
+        customerId: customerId || undefined,
+        status: status || undefined
       },
       include: {
-        customer: true,
-        quotation: true,
-        deal: true,
-        items: true,
-        assignedTo: {
-          include: { user: true },
-        },
+        customer: { select: { id: true, company: true } },
+        items: true
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: { createdAt: "desc" }
     });
 
-    res.json({
-      success: true,
-      orders,
-    });
-
+    return successResponse(res, orders, "Sales Orders fetched successfully");
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    console.error("getSalesOrders controller error:", error);
+    return errorResponse(res, error.message, 500);
   }
 };
 
 //////////////////////////////////////////////////////
-// GET SINGLE SALES ORDER
+// GET SALES ORDER BY ID
 //////////////////////////////////////////////////////
 exports.getSalesOrderById = async (req, res) => {
   try {
+    const businessId = req.business.id;
     const { id } = req.params;
 
-    const order = await prisma.salesOrder.findFirst({
-      where: {
-        id,
-        businessId: req.business.id,
-      },
-      include: {
-        customer: true,
-        quotation: true,
-        deal: true,
-        items: true,
-        assignedTo: {
-          include: { user: true },
-        },
-      },
-    });
+    const order = await salesOrderService.getSalesOrderById(businessId, id);
 
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Sales order not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      order,
-    });
-
+    return successResponse(res, order, "Sales Order retrieved successfully");
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    console.error("getSalesOrderById controller error:", error);
+    return errorResponse(res, error.message, 404);
   }
 };
 
 //////////////////////////////////////////////////////
 // UPDATE SALES ORDER
+// HEAD's rich inline logic for item recalculation + TaxEngine is preserved
 //////////////////////////////////////////////////////
 exports.updateSalesOrder = async (req, res) => {
   try {
+    const businessId = req.business.id;
     const { id } = req.params;
     const {
       customerId,
@@ -267,7 +261,6 @@ exports.updateSalesOrder = async (req, res) => {
       orderDate,
       deliveryDate,
       status,
-      // Tax fields
       cgst,
       sgst,
       igst,
@@ -284,7 +277,7 @@ exports.updateSalesOrder = async (req, res) => {
 
     // 1. Check if order exists
     const existingOrder = await prisma.salesOrder.findFirst({
-      where: { id, businessId: req.business.id },
+      where: { id, businessId },
       include: { items: true }
     });
 
@@ -316,27 +309,24 @@ exports.updateSalesOrder = async (req, res) => {
         status: normalizedStatus,
         orderDate: orderDate ? new Date(orderDate) : undefined,
         deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
-        cgst: Number(cgst),
-        sgst: Number(sgst),
-        igst: Number(igst),
-        tds: Number(tds),
+        cgst: Number(cgst || 0),
+        sgst: Number(sgst || 0),
+        igst: Number(igst || 0),
+        tds: Number(tds || 0),
         ewayBillNo,
         reverseCharge: !!reverseCharge,
         transportDetails,
-        vatPercentage: Number(vatPercentage),
-        vatAmount: Number(vatAmount),
+        vatPercentage: Number(vatPercentage || 0),
+        vatAmount: Number(vatAmount || 0),
         vatType,
         emirate
       };
 
       if (items && items.length > 0) {
-        // Fetch customer and settings for calculations
         const customer = await tx.customer.findFirst({
-          where: { id: customerId || existingOrder.customerId, businessId: req.business.id },
+          where: { id: customerId || existingOrder.customerId, businessId },
         });
-        const settings = await tx.settings.findUnique({
-          where: { businessId: req.business.id },
-        });
+        const settings = await tx.settings.findUnique({ where: { businessId } });
 
         let calculatedSubtotal = 0;
         let totalTaxAmount = 0;
@@ -347,12 +337,12 @@ exports.updateSalesOrder = async (req, res) => {
 
         for (const item of items) {
           const lineAmount = Number(item.quantity || 0) * Number(item.price || 0);
-          
+
           const taxResult = TaxEngine.calculateTax({
             companyCountry: settings?.country || 'UAE',
             companyState: settings?.state || '',
-            customerCountry: customer.country || 'UAE',
-            customerState: customer.state || '',
+            customerCountry: customer?.country || 'UAE',
+            customerState: customer?.state || '',
             taxPercent: Number(item.taxPercent || 0),
             lineSubtotal: lineAmount,
             vatType: vatType || 'exclusive',
@@ -383,7 +373,7 @@ exports.updateSalesOrder = async (req, res) => {
         }
 
         const finalGrandTotal = calculatedSubtotal + totalTaxAmount + Number(shippingCharges) - Number(discount) - Number(tds || 0);
-        
+
         finalUpdateData.subtotal = calculatedSubtotal;
         finalUpdateData.tax = totalTaxAmount;
         finalUpdateData.totalAmount = finalGrandTotal;
@@ -397,11 +387,13 @@ exports.updateSalesOrder = async (req, res) => {
       });
     });
 
-    res.json({ success: true, order: result });
-
+    return successResponse(res, result, "Sales Order updated successfully");
   } catch (error) {
-    console.error("updateSalesOrder error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error("updateSalesOrder controller error:", error);
+    if (error.name === "ZodError") {
+      return errorResponse(res, error.errors[0].message, 400, error.errors);
+    }
+    return errorResponse(res, error.message, 400);
   }
 };
 
@@ -410,31 +402,40 @@ exports.updateSalesOrder = async (req, res) => {
 //////////////////////////////////////////////////////
 exports.deleteSalesOrder = async (req, res) => {
   try {
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
+    const userEmail = req.user.email;
     const { id } = req.params;
 
-    const deleted = await prisma.salesOrder.deleteMany({
-      where: {
-        id,
-        businessId: req.business.id,
-      },
-    });
+    await salesOrderService.deleteSalesOrder(businessId, userId, userEmail, id);
 
-    if (deleted.count === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Sales order not found",
-      });
+    return successResponse(res, null, "Sales Order deleted and stock reservation released successfully");
+  } catch (error) {
+    console.error("deleteSalesOrder controller error:", error);
+    return errorResponse(res, error.message, 400);
+  }
+};
+
+//////////////////////////////////////////////////////
+// CHANGE STATUS
+//////////////////////////////////////////////////////
+exports.changeStatus = async (req, res) => {
+  try {
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
+    const userEmail = req.user.email;
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!status) {
+      return errorResponse(res, "Status is required", 400);
     }
 
-    res.json({
-      success: true,
-      message: "Sales order deleted",
-    });
+    const order = await salesOrderService.changeStatus(businessId, userId, userEmail, id, status);
 
+    return successResponse(res, order, "Sales Order status updated successfully");
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    console.error("changeStatus controller error:", error);
+    return errorResponse(res, error.message, 400);
   }
 };

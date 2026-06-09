@@ -48,9 +48,34 @@ const erpRoutes = require("./routes/erpRoutes");
 const purchaseRoutes = require("./routes/purchaseRoutes");
 const campaignRoutes = require("./routes/campaignRoutes");
 const emailLogRoutes = require("./routes/emailLogRoutes");
-const crmTaskRoutes = require("./routes/crmTaskRoutes");
+const legacyCrmTaskRoutes = require("./routes/crmTaskRoutes");
 const noteRoutes = require("./routes/noteRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+
+const salesReturnRoutes = require("./routes/salesReturnRoutes");
+const recurringInvoiceRoutes = require("./routes/recurringInvoiceRoutes");
+const salesReportRoutes = require("./routes/salesReportRoutes");
+
+// Upgraded CRM Routes
+const crmNoteRoutes = require("./routes/crm/noteRoutes");
+const crmCampaignRoutes = require("./routes/crm/campaignRoutes");
+const crmEmailLogRoutes = require("./routes/crm/emailLogRoutes");
+const crmReportRoutes = require("./routes/crm/reportRoutes");
+const crmTaskRoutes = require("./routes/crm/crmTaskRoutes");
+
+// ── Inventory Module Routes ──────────────────────────────────────────────────
+const inventoryWarehouseRoutes = require("./routes/inventory/warehouse.routes");
+const inventoryStockRoutes = require("./routes/inventory/stock.routes");
+const inventoryReportRoutes = require("./routes/inventory/inventoryReport.routes");
+
+// ── Purchase Module Routes ───────────────────────────────────────────────────
+const purchaseVendorRoutes = require("./routes/purchase/vendor.routes");
+const purchaseRequestRoutes = require("./routes/purchase/purchaseRequest.routes");
+const purchaseOrderV2Routes = require("./routes/purchase/purchaseOrder.routes");
+const grnRoutes = require("./routes/purchase/grn.routes");
+const vendorBillRoutes = require("./routes/purchase/bill.routes");
+const purchaseReturnRoutes = require("./routes/purchase/purchaseReturn.routes");
+const purchaseReportRoutes = require("./routes/purchase/purchaseReport.routes");
 
 const app = express();
 
@@ -103,9 +128,34 @@ app.use("/api/time-entries", timesRoutes);
 app.use("/api/invoice-meta", invoiceMetaRoutes);
 app.use("/api/campaigns", campaignRoutes);
 app.use("/api/email-logs", emailLogRoutes);
-app.use("/api/crm-tasks", crmTaskRoutes);
+app.use("/api/crm-tasks", legacyCrmTaskRoutes);
 app.use("/api/crm-notes", noteRoutes);
 app.use("/api/notifications", notificationRoutes);
+
+app.use("/api/sales-returns", salesReturnRoutes);
+app.use("/api/recurring-invoices", recurringInvoiceRoutes);
+app.use("/api/sales-reports", salesReportRoutes);
+
+// Upgraded CRM Mounts
+app.use("/api/crm-notes", crmNoteRoutes);
+app.use("/api/crm-campaigns", crmCampaignRoutes);
+app.use("/api/crm-email-logs", crmEmailLogRoutes);
+app.use("/api/crm-reports", crmReportRoutes);
+app.use("/api/crm-tasks", crmTaskRoutes);
+
+// ── Inventory Module Mounts ──────────────────────────────────────────────────
+app.use("/api/inventory/warehouses", inventoryWarehouseRoutes);
+app.use("/api/inventory/stock", inventoryStockRoutes);
+app.use("/api/inventory/reports", inventoryReportRoutes);
+
+// ── Purchase Module Mounts ───────────────────────────────────────────────────
+app.use("/api/purchase/vendors", purchaseVendorRoutes);
+app.use("/api/purchase/requests", purchaseRequestRoutes);
+app.use("/api/purchase/orders", purchaseOrderV2Routes);
+app.use("/api/purchase/grn", grnRoutes);
+app.use("/api/purchase/bills", vendorBillRoutes);
+app.use("/api/purchase/returns", purchaseReturnRoutes);
+app.use("/api/purchase/reports", purchaseReportRoutes);
 
 app.get("/", (req, res) => {
   res.send("QUE Accounting Backend Running...");

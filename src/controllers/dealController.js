@@ -1,8 +1,6 @@
 const prisma = require("../config/prisma");
+const { buildPrismaQuery, getPaginationMeta, logAudit } = require("../utils/crmHelper");
 
-//////////////////////////////////////////////////////
-// VALID STAGES
-//////////////////////////////////////////////////////
 const VALID_STAGES = [
   "New",
   "Contacted",
@@ -20,14 +18,18 @@ exports.createDeal = async (req, res) => {
     const {
       name,
       amount,
+      currency = "INR",
       customerId,
       contactId,
-      assignedToId, // ✅ NEW
+      assignedToId,
       stage = "New",
       expectedCloseDate,
       probability,
       source,
       description,
+      campaignId,
+      status = "OPEN",
+      lostReason,
     } = req.body;
 
     //////////////////////////////////////////////////////
@@ -40,9 +42,7 @@ exports.createDeal = async (req, res) => {
       });
     }
 
-    //////////////////////////////////////////////////////
-    // VALIDATE STAGE
-    //////////////////////////////////////////////////////
+    // Validate Stage
     if (!VALID_STAGES.includes(stage)) {
       return res.status(400).json({
         success: false,
@@ -50,9 +50,31 @@ exports.createDeal = async (req, res) => {
       });
     }
 
-    //////////////////////////////////////////////////////
-    // ✅ VALIDATE ASSIGNED USER (IMPORTANT)
-    //////////////////////////////////////////////////////
+    // Validate Customer (Account)
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, businessId: req.business.id, isDeleted: false },
+    });
+    if (!customer) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer Account not found",
+      });
+    }
+
+    // Validate Contact (if provided)
+    if (contactId) {
+      const contact = await prisma.customerContact.findFirst({
+        where: { id: contactId, businessId: req.business.id, isDeleted: false },
+      });
+      if (!contact) {
+        return res.status(400).json({
+          success: false,
+          message: "Contact not found",
+        });
+      }
+    }
+
+    // Validate Assigned User
     if (assignedToId) {
       const member = await prisma.businessUser.findFirst({
         where: {
@@ -70,36 +92,72 @@ exports.createDeal = async (req, res) => {
       }
     }
 
-    //////////////////////////////////////////////////////
-    // CREATE DEAL
-    //////////////////////////////////////////////////////
+    // Validate Campaign
+    if (campaignId) {
+      const camp = await prisma.campaign.findFirst({
+        where: { id: campaignId, businessId: req.business.id, isDeleted: false },
+      });
+      if (!camp) {
+        return res.status(400).json({
+          success: false,
+          message: "Campaign not found",
+        });
+      }
+    }
+
+    // Resolve deal status based on stage
+    let finalStatus = status;
+    if (stage === "Won") finalStatus = "WON";
+    if (stage === "Lost") finalStatus = "LOST";
+
     const deal = await prisma.deal.create({
       data: {
         businessId: req.business.id,
-
         name,
         amount: Number(amount),
+        currency,
         customerId,
         contactId,
-
-        assignedToId, // ✅ SAVE
-
+        assignedToId,
         stage,
-        probability,
+        probability: probability !== undefined ? parseInt(probability) : null,
+        expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : null,
         source,
         description,
-
-        expectedCloseDate: expectedCloseDate
-          ? new Date(expectedCloseDate)
-          : null,
+        campaignId,
+        status: finalStatus,
+        lostReason: stage === "Lost" ? lostReason : null,
       },
+      include: {
+        customer: true,
+        contact: true,
+        campaign: true,
+        assignedTo: { include: { user: true } },
+      },
+    });
+
+    // Write Stage History
+    await prisma.dealStageHistory.create({
+      data: {
+        dealId: deal.id,
+        fromStage: "None",
+        toStage: stage,
+        changedById: req.user.userId,
+      },
+    });
+
+    await logAudit(req.business.id, {
+      userId: req.user.userId,
+      action: "CREATE",
+      moduleName: "Deal",
+      recordId: deal.id,
+      details: { name: deal.name, amount: deal.amount, stage: deal.stage },
     });
 
     res.status(201).json({
       success: true,
       deal,
     });
-
   } catch (error) {
     console.error("createDeal error:", error);
     res.status(500).json({
@@ -108,35 +166,40 @@ exports.createDeal = async (req, res) => {
     });
   }
 };
+
 //////////////////////////////////////////////////////
-// GET ALL DEALS
+// GET ALL DEALS (PAGINATION, FILTERS, SEARCH)
 //////////////////////////////////////////////////////
 exports.getDeals = async (req, res) => {
   try {
-    const deals = await prisma.deal.findMany({
-      where: {
-        businessId: req.business.id,
+    const { queryOptions, pagination } = buildPrismaQuery(req, {
+      searchFields: ["name", "source", "description"],
+      filterFields: {
+        customerId: "customerId",
+        contactId: "contactId",
+        assignedToId: "assignedToId",
+        campaignId: "campaignId",
+        stage: "stage",
+        status: "status",
       },
-      include: {
+      relations: {
         customer: true,
         contact: true,
-         assignedTo: {
-    include: {
-      user: true, // 👈 get actual user data
-    },
-  },
-      },
-      orderBy: {
-        createdAt: "desc",
+        campaign: true,
+        assignedTo: { include: { user: true } },
       },
     });
+
+    const totalCount = await prisma.deal.count({ where: queryOptions.where });
+    const deals = await prisma.deal.findMany(queryOptions);
 
     res.json({
       success: true,
-      deals,
+      data: deals,
+      pagination: getPaginationMeta(totalCount, pagination.page, pagination.limit),
     });
-
   } catch (error) {
+    console.error("getDeals error:", error);
     res.status(500).json({
       success: false,
       message: error.message,
@@ -155,15 +218,17 @@ exports.getDealById = async (req, res) => {
       where: {
         id,
         businessId: req.business.id,
+        isDeleted: false,
       },
       include: {
         customer: true,
         contact: true,
-         assignedTo: {
-    include: {
-      user: true, // 👈 get actual user data
-    },
-  },
+        campaign: true,
+        stageHistory: { orderBy: { changedAt: "desc" } },
+        notes: { where: { isDeleted: false }, orderBy: { createdAt: "desc" } },
+        activities: { where: { isDeleted: false }, orderBy: { activityDate: "desc" } },
+        emailLogs: { orderBy: { sentAt: "desc" } },
+        assignedTo: { include: { user: true } },
       },
     });
 
@@ -178,7 +243,6 @@ exports.getDealById = async (req, res) => {
       success: true,
       deal,
     });
-
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -193,24 +257,40 @@ exports.getDealById = async (req, res) => {
 exports.updateDeal = async (req, res) => {
   try {
     const { id } = req.params;
+    const {
+      stage,
+      assignedToId,
+      expectedCloseDate,
+      campaignId,
+      status,
+      lostReason,
+      ...rest
+    } = req.body;
 
-    //////////////////////////////////////////////////////
-    // VALIDATE STAGE
-    //////////////////////////////////////////////////////
-    if (req.body.stage && !VALID_STAGES.includes(req.body.stage)) {
+    const existing = await prisma.deal.findFirst({
+      where: { id, businessId: req.business.id, isDeleted: false },
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Deal not found",
+      });
+    }
+
+    // Validate Stage
+    if (stage && !VALID_STAGES.includes(stage)) {
       return res.status(400).json({
         success: false,
         message: "Invalid stage",
       });
     }
 
-    //////////////////////////////////////////////////////
-    // VALIDATE ASSIGNED USER
-    //////////////////////////////////////////////////////
-    if (req.body.assignedToId) {
+    // Validate Assignment
+    if (assignedToId) {
       const member = await prisma.businessUser.findFirst({
         where: {
-          id: req.body.assignedToId,
+          id: assignedToId,
           businessId: req.business.id,
           isActive: true,
         },
@@ -224,55 +304,79 @@ exports.updateDeal = async (req, res) => {
       }
     }
 
-    //////////////////////////////////////////////////////
-    // FORMAT DATE
-    //////////////////////////////////////////////////////
-    if (req.body.expectedCloseDate) {
-      req.body.expectedCloseDate = new Date(req.body.expectedCloseDate);
+    // Validate Campaign
+    if (campaignId) {
+      const camp = await prisma.campaign.findFirst({
+        where: { id: campaignId, businessId: req.business.id, isDeleted: false },
+      });
+      if (!camp) {
+        return res.status(400).json({
+          success: false,
+          message: "Campaign not found",
+        });
+      }
     }
 
-    //////////////////////////////////////////////////////
-    // UPDATE + RETURN DATA
-    //////////////////////////////////////////////////////
+    // Handle stage change history logging
+    let stageChanged = false;
+    let fromStage = existing.stage;
+    let toStage = stage;
+
+    let finalStatus = status;
+    if (stage && stage !== existing.stage) {
+      stageChanged = true;
+      if (stage === "Won") finalStatus = "WON";
+      if (stage === "Lost") finalStatus = "LOST";
+      if (stage !== "Won" && stage !== "Lost") finalStatus = "OPEN";
+    }
+
+    const updatedData = {
+      ...rest,
+      ...(stage && { stage }),
+      ...(assignedToId !== undefined && { assignedToId }),
+      ...(expectedCloseDate && { expectedCloseDate: new Date(expectedCloseDate) }),
+      ...(campaignId !== undefined && { campaignId }),
+      ...(finalStatus && { status: finalStatus }),
+      ...(lostReason !== undefined && { lostReason: stage === "Lost" || existing.stage === "Lost" ? lostReason : null }),
+    };
+
     const deal = await prisma.deal.update({
       where: { id },
-      data: req.body,
+      data: updatedData,
       include: {
         customer: true,
         contact: true,
-        assignedTo: {
-          include: {
-            user: true,
-          },
-        },
+        campaign: true,
+        assignedTo: { include: { user: true } },
       },
     });
 
-    //////////////////////////////////////////////////////
-    // SECURITY CHECK (IMPORTANT)
-    //////////////////////////////////////////////////////
-    if (deal.businessId !== req.business.id) {
-      return res.status(403).json({
-        success: false,
-        message: "Unauthorized",
+    // Write Stage History if changed
+    if (stageChanged) {
+      await prisma.dealStageHistory.create({
+        data: {
+          dealId: id,
+          fromStage,
+          toStage,
+          changedById: req.user.userId,
+        },
       });
     }
+
+    await logAudit(req.business.id, {
+      userId: req.user.userId,
+      action: "UPDATE",
+      moduleName: "Deal",
+      recordId: id,
+      details: updatedData,
+    });
 
     res.json({
       success: true,
       deal,
     });
-
   } catch (error) {
     console.error("updateDeal error:", error);
-
-    if (error.code === "P2025") {
-      return res.status(404).json({
-        success: false,
-        message: "Deal not found",
-      });
-    }
-
     res.status(500).json({
       success: false,
       message: error.message,
@@ -281,32 +385,44 @@ exports.updateDeal = async (req, res) => {
 };
 
 //////////////////////////////////////////////////////
-// DELETE DEAL
+// SOFT DELETE DEAL
 //////////////////////////////////////////////////////
 exports.deleteDeal = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deleted = await prisma.deal.deleteMany({
+    const deleted = await prisma.deal.updateMany({
       where: {
         id,
         businessId: req.business.id,
+        isDeleted: false,
+      },
+      data: {
+        isDeleted: true,
+        deletedAt: new Date(),
       },
     });
 
     if (deleted.count === 0) {
       return res.status(404).json({
         success: false,
-        message: "Deal not found",
+        message: "Deal not found or already deleted",
       });
     }
 
-    res.json({
-      success: true,
-      message: "Deal deleted",
+    await logAudit(req.business.id, {
+      userId: req.user.userId,
+      action: "DELETE_SOFT",
+      moduleName: "Deal",
+      recordId: id,
     });
 
+    res.json({
+      success: true,
+      message: "Deal soft-deleted successfully",
+    });
   } catch (error) {
+    console.error("deleteDeal error:", error);
     res.status(500).json({
       success: false,
       message: error.message,

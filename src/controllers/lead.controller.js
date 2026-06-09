@@ -1,7 +1,9 @@
 const prisma = require("../config/prisma");
+const { buildPrismaQuery, getPaginationMeta, logAudit } = require("../utils/crmHelper");
+const { convertLead } = require("../services/crm/leadConversionService");
 
 //////////////////////////////////////////////////////
-// CREATE LEAD (FINAL SAFE VERSION)
+// CREATE LEAD
 //////////////////////////////////////////////////////
 exports.createLead = async (req, res) => {
   try {
@@ -16,20 +18,19 @@ exports.createLead = async (req, res) => {
       state,
       country,
       zipCode,
-      status,
+      status = "NEW",
       source,
-      assignedTo, // 👈 from frontend
+      assignedTo, // Assumed assignedToId
       tags,
-      leadValue,
+      leadValue = 0,
       description,
-      isPublic,
-      contactedToday,
-      defaultLanguage,
+      isPublic = false,
+      contactedToday = false,
+      defaultLanguage = "SYSTEM",
+      score = 0,
+      campaignId,
     } = req.body;
 
-    //////////////////////////////////////////////////////
-    // REQUIRED FIELD
-    //////////////////////////////////////////////////////
     if (!name) {
       return res.status(400).json({
         success: false,
@@ -37,15 +38,12 @@ exports.createLead = async (req, res) => {
       });
     }
 
-    //////////////////////////////////////////////////////
-    // FIX ASSIGNED USER
-    //////////////////////////////////////////////////////
+    // Validate assignedTo BusinessUser
     let assignedToId = null;
-
     if (assignedTo) {
       const member = await prisma.businessUser.findFirst({
         where: {
-          id: assignedTo, // 👈 expecting ID
+          id: assignedTo,
           businessId: req.business.id,
           isActive: true,
         },
@@ -57,26 +55,33 @@ exports.createLead = async (req, res) => {
           message: "Assigned user not part of this business",
         });
       }
-
       assignedToId = assignedTo;
     }
 
-    //////////////////////////////////////////////////////
-    // FIX TAGS (string → array)
-    //////////////////////////////////////////////////////
+    // Format tags
     let formattedTags = [];
-
     if (typeof tags === "string") {
-      formattedTags = tags.split(",").map((t) => t.trim());
+      formattedTags = tags.split(",").map((t) => t.trim()).filter(Boolean);
     } else if (Array.isArray(tags)) {
       formattedTags = tags;
     }
 
-    //////////////////////////////////////////////////////
-    // CREATE LEAD
-    //////////////////////////////////////////////////////
+    // Validate campaign
+    if (campaignId) {
+      const camp = await prisma.campaign.findFirst({
+        where: { id: campaignId, businessId: req.business.id, isDeleted: false },
+      });
+      if (!camp) {
+        return res.status(400).json({
+          success: false,
+          message: "Campaign not found",
+        });
+      }
+    }
+
     const lead = await prisma.lead.create({
       data: {
+        businessId: req.business.id,
         name,
         email,
         phone,
@@ -87,25 +92,30 @@ exports.createLead = async (req, res) => {
         state,
         country,
         zipCode,
-
         status,
         source,
-
-        assignedToId, // ✅ FIXED
-
+        assignedToId,
         tags: formattedTags,
         leadValue: Number(leadValue) || 0,
         description,
-
         isPublic: Boolean(isPublic),
         contactedToday: Boolean(contactedToday),
         defaultLanguage,
-
-        businessId: req.business.id,
+        score: parseInt(score) || 0,
+        campaignId,
       },
       include: {
-        assignedTo: true,
+        assignedTo: { include: { user: true } },
+        campaign: true,
       },
+    });
+
+    await logAudit(req.business.id, {
+      userId: req.user.userId,
+      action: "CREATE",
+      moduleName: "Lead",
+      recordId: lead.id,
+      details: { name: lead.name, status: lead.status },
     });
 
     res.status(201).json({
@@ -113,7 +123,6 @@ exports.createLead = async (req, res) => {
       message: "Lead created successfully",
       data: lead,
     });
-
   } catch (error) {
     console.error("createLead error:", error);
     res.status(500).json({
@@ -124,37 +133,41 @@ exports.createLead = async (req, res) => {
 };
 
 //////////////////////////////////////////////////////
-// GET ALL LEADS
+// GET ALL LEADS (WITH SEARCH, DYNAMIC FILTER, PAGINATION)
 //////////////////////////////////////////////////////
 exports.getAllLeads = async (req, res) => {
   try {
-    const leads = await prisma.lead.findMany({
-      where: {
-        businessId: req.business.id // ✅ FIX
+    const { queryOptions, pagination } = buildPrismaQuery(req, {
+      searchFields: ["name", "email", "phone", "company", "website"],
+      filterFields: {
+        status: "status",
+        source: "source",
+        assignedToId: "assignedToId",
+        campaignId: "campaignId",
       },
-      orderBy: { createdAt: 'desc' },
-      include: { stage: true,
-         assignedTo: {
-    include: {
-      user: true,
-    },
-  },
-       }
+      relations: {
+        stage: true,
+        campaign: true,
+        assignedTo: { include: { user: true } },
+      },
     });
+
+    const totalCount = await prisma.lead.count({ where: queryOptions.where });
+    const leads = await prisma.lead.findMany(queryOptions);
 
     res.status(200).json({
       success: true,
-      count: leads.length,
       data: leads,
+      pagination: getPaginationMeta(totalCount, pagination.page, pagination.limit),
     });
-
   } catch (error) {
+    console.error("getAllLeads error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
 //////////////////////////////////////////////////////
-// GET LEAD DETAILS
+// GET LEAD DETAILS (BY ID)
 //////////////////////////////////////////////////////
 exports.getLeadDetails = async (req, res) => {
   try {
@@ -163,34 +176,31 @@ exports.getLeadDetails = async (req, res) => {
     const lead = await prisma.lead.findFirst({
       where: {
         id,
-        businessId: req.business.id // ✅ FIX
+        businessId: req.business.id,
+        isDeleted: false,
       },
       include: {
         stage: true,
-        activities: true,
-        notes: true,
-        tasks: true,
-        reminders: true,
-        assignedTo: {
-  include: {
-    user: true,
-  },
-},
-      }
+        campaign: true,
+        activities: { orderBy: { createdAt: "desc" } },
+        crmNotes: { where: { isDeleted: false }, orderBy: { createdAt: "desc" } },
+        emailLogs: { orderBy: { sentAt: "desc" } },
+        assignedTo: { include: { user: true } },
+        conversionLog: true,
+      },
     });
 
     if (!lead) {
       return res.status(404).json({
         success: false,
-        message: "Lead not found"
+        message: "Lead not found",
       });
     }
 
     res.json({
       success: true,
-      data: lead
+      data: lead,
     });
-
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -202,241 +212,296 @@ exports.getLeadDetails = async (req, res) => {
 exports.updateLead = async (req, res) => {
   try {
     const { id } = req.params;
+    const {
+      assignedTo,
+      tags,
+      score,
+      campaignId,
+      ...rest
+    } = req.body;
 
-    const updated = await prisma.lead.updateMany({
-      where: {
-        id,
-        businessId: req.business.id // ✅ FIX
-      },
-      data: req.body,
+    const existing = await prisma.lead.findFirst({
+      where: { id, businessId: req.business.id, isDeleted: false },
     });
 
-    if (updated.count === 0) {
+    if (!existing) {
       return res.status(404).json({
         success: false,
-        message: "Lead not found"
+        message: "Lead not found",
       });
     }
 
-    res.json({
-      success: true,
-      message: "Lead updated successfully"
+    // Validate assignment
+    let assignedToId = undefined;
+    if (assignedTo) {
+      const member = await prisma.businessUser.findFirst({
+        where: { id: assignedTo, businessId: req.business.id, isActive: true },
+      });
+      if (!member) {
+        return res.status(400).json({
+          success: false,
+          message: "Assigned user is invalid",
+        });
+      }
+      assignedToId = assignedTo;
+    }
+
+    // Validate campaign
+    if (campaignId) {
+      const camp = await prisma.campaign.findFirst({
+        where: { id: campaignId, businessId: req.business.id, isDeleted: false },
+      });
+      if (!camp) {
+        return res.status(400).json({
+          success: false,
+          message: "Campaign not found",
+        });
+      }
+    }
+
+    // Format tags
+    let formattedTags = undefined;
+    if (tags) {
+      if (typeof tags === "string") {
+        formattedTags = tags.split(",").map((t) => t.trim()).filter(Boolean);
+      } else if (Array.isArray(tags)) {
+        formattedTags = tags;
+      }
+    }
+
+    const updatedData = {
+      ...rest,
+      ...(assignedTo !== undefined && { assignedToId }),
+      ...(formattedTags && { tags: formattedTags }),
+      ...(score !== undefined && { score: parseInt(score) || 0 }),
+      ...(campaignId !== undefined && { campaignId }),
+    };
+
+    const lead = await prisma.lead.update({
+      where: { id },
+      data: updatedData,
+      include: {
+        assignedTo: { include: { user: true } },
+      },
     });
 
+    await logAudit(req.business.id, {
+      userId: req.user.userId,
+      action: "UPDATE",
+      moduleName: "Lead",
+      recordId: id,
+      details: updatedData,
+    });
+
+    res.json({
+      success: true,
+      message: "Lead updated successfully",
+      data: lead,
+    });
   } catch (error) {
+    console.error("updateLead error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
 //////////////////////////////////////////////////////
-// DELETE LEAD
+// SOFT DELETE LEAD
 //////////////////////////////////////////////////////
 exports.deleteLead = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deleted = await prisma.lead.deleteMany({
+    const deleted = await prisma.lead.updateMany({
       where: {
         id,
-        businessId: req.business.id // ✅ FIX
-      }
+        businessId: req.business.id,
+        isDeleted: false,
+      },
+      data: {
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
     });
 
     if (deleted.count === 0) {
       return res.status(404).json({
         success: false,
-        message: "Lead not found"
+        message: "Lead not found or already deleted",
       });
     }
 
-    res.json({
-      success: true,
-      message: "Lead deleted successfully"
+    await logAudit(req.business.id, {
+      userId: req.user.userId,
+      action: "DELETE_SOFT",
+      moduleName: "Lead",
+      recordId: id,
     });
 
+    res.json({
+      success: true,
+      message: "Lead soft-deleted successfully",
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
 //////////////////////////////////////////////////////
-// CONVERT TO CUSTOMER
+// LEAD CONVERSION ENGINE (PHASE 4 - TRANSACTION SAFE)
 //////////////////////////////////////////////////////
 exports.convertToCustomer = async (req, res) => {
   try {
     const leadId = req.params.id;
-    const data = req.body;
+    const {
+      createDeal = false,
+      dealName,
+      dealAmount,
+      expectedCloseDate,
+      dealStage,
+      campaignId,
+      existingAccountId,
+      existingContactId,
+    } = req.body;
 
-    const result = await prisma.$transaction(async (tx) => {
-
-      const lead = await tx.lead.findFirst({
-        where: {
-          id: leadId,
-          businessId: req.business.id
-        }
-      });
-
-      if (!lead) throw new Error("Lead not found");
-
-      const existing = await tx.customer.findUnique({
-        where: { leadId }
-      });
-
-      if (existing) throw new Error("Already converted");
-
-      // ✅ CREATE CUSTOMER FROM FORM DATA
-      const customer = await tx.customer.create({
-        data: {
-          businessId: req.business.id,
-
-          company: data.company,
-          vatNumber: data.vatNumber,
-          phone: data.phone,
-          website: data.website,
-          group: data.group,
-          currency: data.currency || "SYSTEM",
-          defaultLanguage: data.defaultLanguage || "SYSTEM",
-
-          address: data.address,
-          city: data.city,
-          state: data.state,
-          zipCode: data.zipCode,
-          country: data.country,
-
-          billingStreet: data.billingStreet,
-          billingCity: data.billingCity,
-          billingState: data.billingState,
-          billingZipCode: data.billingZipCode,
-          billingCountry: data.billingCountry,
-
-          shippingStreet: data.shippingStreet,
-          shippingCity: data.shippingCity,
-          shippingState: data.shippingState,
-          shippingZipCode: data.shippingZipCode,
-          shippingCountry: data.shippingCountry,
-
-          leadId: lead.id,
-          region: data.region || "INDIA" // Required field from schema based on frontend
-        }
-      });
-
-      // ✅ CREATE DEAL IF REQUESTED
-      if (data.createDeal && data.dealName) {
-        await tx.deal.create({
-          data: {
-            businessId: req.business.id,
-            customerId: customer.id,
-            name: data.dealName,
-            amount: data.dealAmount ? parseFloat(data.dealAmount) : 0,
-            currency: data.currency || "INR",
-            stage: data.dealStage || "New",
-            expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : null,
-            source: lead.source,
-            assignedToId: lead.assignedToId
-          }
-        });
-      }
-
-      // ✅ UPDATE LEAD
-      await tx.lead.update({
-        where: { id: leadId },
-        data: { status: "CONVERTED" }
-      });
-
-      return customer;
+    const result = await convertLead(req.business.id, req.user.userId, leadId, {
+      createDeal,
+      dealName,
+      dealAmount,
+      expectedCloseDate,
+      dealStage,
+      campaignId,
+      existingAccountId,
+      existingContactId,
     });
 
     res.json({
       success: true,
-      message: "Converted successfully",
-      data: result
+      message: "Lead converted successfully to enterprise account & primary contact.",
+      data: result,
     });
-
   } catch (error) {
     console.error("convert error:", error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
+
 //////////////////////////////////////////////////////
-// MOVE PIPELINE
+// MOVE PIPELINE STAGE
 //////////////////////////////////////////////////////
 exports.moveStage = async (req, res) => {
   try {
     const { id } = req.params;
     const { stageId } = req.body;
 
-    const lead = await prisma.lead.update({
-      where: { id },
-      data: { stageId }
+    // Validate lead
+    const lead = await prisma.lead.findFirst({
+      where: { id, businessId: req.business.id, isDeleted: false },
     });
 
-    res.json({ success: true, data: lead });
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
 
+    const updatedLead = await prisma.lead.update({
+      where: { id },
+      data: { stageId },
+      include: { stage: true },
+    });
+
+    await logAudit(req.business.id, {
+      userId: req.user.userId,
+      action: "MOVE_STAGE",
+      moduleName: "Lead",
+      recordId: id,
+      details: { stageId },
+    });
+
+    res.json({ success: true, data: updatedLead });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 //////////////////////////////////////////////////////
-// ACTIVITY
+// REUSABLE LEAD NOTE / TASK / REMINDER ENDPOINTS
 //////////////////////////////////////////////////////
 exports.addActivity = async (req, res) => {
-  const { id } = req.params;
-  const { message } = req.body;
+  try {
+    const { id } = req.params;
+    const { message } = req.body;
 
-  const data = await prisma.leadActivity.create({
-    data: { leadId: id, message }
-  });
+    const data = await prisma.leadActivity.create({
+      data: { leadId: id, message },
+    });
 
-  res.json({ success: true, data });
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
 exports.getActivities = async (req, res) => {
-  const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-  const data = await prisma.leadActivity.findMany({
-    where: { leadId: id },
-    orderBy: { createdAt: 'desc' }
-  });
+    const data = await prisma.leadActivity.findMany({
+      where: { leadId: id },
+      orderBy: { createdAt: "desc" },
+    });
 
-  res.json({ success: true, data });
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
-//////////////////////////////////////////////////////
-// NOTE / TASK / REMINDER
-//////////////////////////////////////////////////////
 exports.addNote = async (req, res) => {
-  const { id } = req.params;
-  const { note } = req.body;
+  try {
+    const { id } = req.params;
+    const { note } = req.body;
 
-  const data = await prisma.leadNote.create({
-    data: { leadId: id, note }
-  });
+    const data = await prisma.leadNote.create({
+      data: { leadId: id, note },
+    });
 
-  res.json({ success: true, data });
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
 exports.addTask = async (req, res) => {
-  const { id } = req.params;
-  const { title } = req.body;
+  try {
+    const { id } = req.params;
+    const { title } = req.body;
 
-  const data = await prisma.leadTask.create({
-    data: { leadId: id, title, status: "PENDING" }
-  });
+    const data = await prisma.leadTask.create({
+      data: { leadId: id, title, status: "PENDING" },
+    });
 
-  res.json({ success: true, data });
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
 exports.addReminder = async (req, res) => {
-  const { id } = req.params;
-  const { title, date } = req.body;
+  try {
+    const { id } = req.params;
+    const { title, date } = req.body;
 
-  const data = await prisma.leadReminder.create({
-    data: { leadId: id, title, date: new Date(date) }
-  });
+    const data = await prisma.leadReminder.create({
+      data: { leadId: id, title, date: new Date(date) },
+    });
 
-  res.json({ success: true, data });
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };

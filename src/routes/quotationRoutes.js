@@ -42,4 +42,20 @@ router.delete(
   Controller.deleteQuotation
 );
 
+router.post(
+  "/:id/approve",
+  auth,
+  business,
+  checkPermission("quotation", "update"),
+  Controller.approveQuotation
+);
+
+router.post(
+  "/:id/reject",
+  auth,
+  business,
+  checkPermission("quotation", "update"),
+  Controller.rejectQuotation
+);
+
 module.exports = router;

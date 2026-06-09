@@ -1,294 +1,137 @@
-const prisma = require("../config/prisma");
+const quotationService = require("../services/sales/quotation.service");
+const { createQuotationSchema, updateQuotationSchema } = require("../validations/sales.validation");
+const { successResponse, errorResponse } = require("../utils/response");
 
-const VALID_STATUS = ["Draft", "Sent", "Accepted", "Rejected"];
-
-//////////////////////////////////////////////////////
-// GENERATE QUOTE NUMBER
-//////////////////////////////////////////////////////
-const generateQuoteNumber = async () => {
-  const count = await prisma.quotation.count();
-  return `QT-${(count + 1).toString().padStart(3, "0")}`;
-};
-
-//////////////////////////////////////////////////////
-// CREATE QUOTATION
-//////////////////////////////////////////////////////
 exports.createQuotation = async (req, res) => {
   try {
-    const {
-      title,
-      customerId,
-      dealId,
-      assignedToId,
-      items,
-      tax = 0,
-      discount = 0,
-      issueDate,
-      expiryDate,
-      notes,
-    } = req.body;
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
+    const userEmail = req.user.email;
 
-    //////////////////////////////////////////////////////
-    // VALIDATION
-    //////////////////////////////////////////////////////
-    if (!customerId || !items || items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "customerId and items are required",
-      });
-    }
+    // Validate body payload using Zod
+    const validatedData = createQuotationSchema.parse(req.body);
 
-    //////////////////////////////////////////////////////
-    // VALIDATE ASSIGNED USER
-    //////////////////////////////////////////////////////
-    if (assignedToId) {
-      const member = await prisma.businessUser.findFirst({
-        where: {
-          id: assignedToId,
-          businessId: req.business.id,
-          isActive: true,
-        },
-      });
+    const quotation = await quotationService.createQuotation(businessId, userId, userEmail, validatedData);
 
-      if (!member) {
-        return res.status(400).json({
-          success: false,
-          message: "Assigned user not part of this business",
-        });
-      }
-    }
-
-    //////////////////////////////////////////////////////
-    // CALCULATE TOTAL
-    //////////////////////////////////////////////////////
-    let calculatedSubtotal = 0
-    let totalTaxAmount = 0
-
-    const mappedItems = items.map((item) => {
-      const lineAmount = Number(item.quantity || 0) * Number(item.price || 0)
-      const lineTax = (lineAmount * Number(item.taxPercent || 0)) / 100
-      
-      calculatedSubtotal += lineAmount
-      totalTaxAmount += lineTax
-
-      return {
-        productId: item.productId || undefined,
-        description: item.name || item.description,
-        itemType: item.type || item.itemType || 'GOODS',
-        hsnSacCode: item.hsn || item.hsnSacCode,
-        quantity: Number(item.quantity || 0),
-        price: Number(item.price || 0),
-        taxPercent: Number(item.taxPercent || 0),
-        total: lineAmount + lineTax,
-        updatedAt: new Date()
-      }
-    })
-
-    const finalGrandTotal = calculatedSubtotal + totalTaxAmount - Number(discount || 0)
-
-    //////////////////////////////////////////////////////
-    // CREATE
-    //////////////////////////////////////////////////////
-    const quotation = await prisma.quotation.create({
-      data: {
-        businessId: req.business.id,
-        quoteNumber: await generateQuoteNumber(),
-
-        title,
-        customerId,
-        dealId,
-        assignedToId,
-
-        subtotal: calculatedSubtotal,
-        tax: totalTaxAmount,
-        discount: Number(discount || 0),
-        totalAmount: finalGrandTotal,
-
-        issueDate: new Date(issueDate),
-        expiryDate: expiryDate ? new Date(expiryDate) : null,
-
-        notes,
-
-        items: {
-          create: mappedItems,
-        },
-      },
-      include: {
-        items: true,
-      },
-    });
-
-    res.status(201).json({
-      success: true,
-      quotation,
-    });
-
+    return successResponse(res, quotation, "Quotation drafted successfully", 201);
   } catch (error) {
-    console.error("createQuotation error:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    console.error("createQuotation controller error:", error);
+    if (error.name === "ZodError") {
+      return errorResponse(res, error.errors[0].message, 400, error.errors);
+    }
+    return errorResponse(res, error.message, 500);
   }
 };
 
-//////////////////////////////////////////////////////
-// GET ALL QUOTATIONS
-//////////////////////////////////////////////////////
 exports.getQuotations = async (req, res) => {
   try {
+    const businessId = req.business.id;
+    const { customerId, status } = req.query;
+
+    const prisma = require("../config/prisma");
     const quotations = await prisma.quotation.findMany({
       where: {
-        businessId: req.business.id,
+        businessId,
+        isDeleted: false,
+        customerId: customerId || undefined,
+        status: status || undefined
       },
       include: {
-        customer: true,
-        deal: true,
-        items: true,
-        assignedTo: {
-          include: { user: true },
+        customer: {
+          select: { id: true, company: true }
         },
+        items: true
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: { createdAt: "desc" }
     });
 
-    res.json({
-      success: true,
-      quotations,
-    });
-
+    return successResponse(res, quotations, "Quotations fetched successfully");
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    console.error("getQuotations controller error:", error);
+    return errorResponse(res, error.message, 500);
   }
 };
 
-//////////////////////////////////////////////////////
-// GET SINGLE QUOTATION
-//////////////////////////////////////////////////////
 exports.getQuotationById = async (req, res) => {
   try {
+    const businessId = req.business.id;
     const { id } = req.params;
 
-    const quotation = await prisma.quotation.findFirst({
-      where: {
-        id,
-        businessId: req.business.id,
-      },
-      include: {
-        customer: true,
-        deal: true,
-        items: true,
-        assignedTo: {
-          include: { user: true },
-        },
-      },
-    });
+    const quotation = await quotationService.getQuotationById(businessId, id);
 
-    if (!quotation) {
-      return res.status(404).json({
-        success: false,
-        message: "Quotation not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      quotation,
-    });
-
+    return successResponse(res, quotation, "Quotation retrieved successfully");
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    console.error("getQuotationById controller error:", error);
+    return errorResponse(res, error.message, 404);
   }
 };
 
-//////////////////////////////////////////////////////
-// UPDATE QUOTATION
-//////////////////////////////////////////////////////
 exports.updateQuotation = async (req, res) => {
   try {
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
+    const userEmail = req.user.email;
     const { id } = req.params;
 
-    //////////////////////////////////////////////////////
-    // VALIDATE STATUS
-    //////////////////////////////////////////////////////
-    if (req.body.status && !VALID_STATUS.includes(req.body.status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid status",
-      });
-    }
+    // Validate body payload using Zod
+    const validatedData = updateQuotationSchema.parse(req.body);
 
-    //////////////////////////////////////////////////////
-    // UPDATE
-    //////////////////////////////////////////////////////
-    const quotation = await prisma.quotation.update({
-      where: { id },
-      data: req.body,
-      include: {
-        items: true,
-      },
-    });
+    const quotation = await quotationService.updateQuotation(businessId, userId, userEmail, id, validatedData);
 
-    res.json({
-      success: true,
-      quotation,
-    });
-
+    return successResponse(res, quotation, "Quotation updated successfully");
   } catch (error) {
-    console.error("updateQuotation error:", error);
-
-    if (error.code === "P2025") {
-      return res.status(404).json({
-        success: false,
-        message: "Quotation not found",
-      });
+    console.error("updateQuotation controller error:", error);
+    if (error.name === "ZodError") {
+      return errorResponse(res, error.errors[0].message, 400, error.errors);
     }
-
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return errorResponse(res, error.message, 400);
   }
 };
 
-//////////////////////////////////////////////////////
-// DELETE QUOTATION
-//////////////////////////////////////////////////////
 exports.deleteQuotation = async (req, res) => {
   try {
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
+    const userEmail = req.user.email;
     const { id } = req.params;
 
-    const deleted = await prisma.quotation.deleteMany({
-      where: {
-        id,
-        businessId: req.business.id,
-      },
-    });
+    await quotationService.deleteQuotation(businessId, userId, userEmail, id);
 
-    if (deleted.count === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Quotation not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      message: "Quotation deleted",
-    });
-
+    return successResponse(res, null, "Quotation deleted successfully");
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    console.error("deleteQuotation controller error:", error);
+    return errorResponse(res, error.message, 400);
+  }
+};
+
+exports.approveQuotation = async (req, res) => {
+  try {
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
+    const userEmail = req.user.email;
+    const { id } = req.params;
+
+    const quotation = await quotationService.changeStatus(businessId, userId, userEmail, id, "APPROVED");
+
+    return successResponse(res, quotation, "Quotation approved successfully");
+  } catch (error) {
+    console.error("approveQuotation controller error:", error);
+    return errorResponse(res, error.message, 400);
+  }
+};
+
+exports.rejectQuotation = async (req, res) => {
+  try {
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
+    const userEmail = req.user.email;
+    const { id } = req.params;
+
+    const quotation = await quotationService.changeStatus(businessId, userId, userEmail, id, "REJECTED");
+
+    return successResponse(res, quotation, "Quotation rejected successfully");
+  } catch (error) {
+    console.error("rejectQuotation controller error:", error);
+    return errorResponse(res, error.message, 400);
   }
 };

@@ -12,6 +12,14 @@ router.post(
   Controller.createSalesOrder
 );
 
+router.post(
+  "/convert/:quotationId",
+  auth,
+  business,
+  checkPermission("sales_order", "create"),
+  Controller.convertQuotation
+);
+
 router.get(
   "/",
   auth,
@@ -48,6 +56,14 @@ router.delete(
   business,
   checkPermission("sales_order", "delete"),
   Controller.deleteSalesOrder
+);
+
+router.post(
+  "/:id/status",
+  auth,
+  business,
+  checkPermission("sales_order", "update"),
+  Controller.changeStatus
 );
 
 module.exports = router;
