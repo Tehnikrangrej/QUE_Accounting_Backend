@@ -20,15 +20,19 @@ const deductStock = async (tx, businessId, items, isFromReservation = false) => 
 
     if (stockRecord) {
       const reservedQtyDelta = isFromReservation ? -Math.min(stockRecord.reservedQty, item.quantity) : 0;
-      await createStockMovement(tx, {
-        businessId,
-        productId: item.productId,
-        warehouseId: stockRecord.warehouseId,
-        quantity: -item.quantity,
-        type: "SALE_OUT",
-        referenceType: "INVOICE",
-        notes: "Auto-deducted upon sales invoice creation",
-        reservedQtyDelta
+
+      const dataUpdate = {
+        quantity: { decrement: item.quantity }
+      };
+
+      if (isFromReservation) {
+        const reservedDec = Math.min(stockRecord.reservedQty, item.quantity);
+        dataUpdate.reservedQty = { decrement: reservedDec };
+      }
+
+      await tx.stock.update({
+        where: { id: stockRecord.id },
+        data: dataUpdate
       });
     }
   }
@@ -49,14 +53,13 @@ const restoreStock = async (tx, businessId, items) => {
     });
 
     if (stockRecord) {
-      await createStockMovement(tx, {
-        businessId,
-        productId: item.productId,
-        warehouseId: stockRecord.warehouseId,
-        quantity: item.quantity,
-        type: "RETURN_IN",
-        referenceType: "INVOICE",
-        notes: "Restored upon invoice cancellation/deletion"
+      await tx.stock.update({
+        where: { id: stockRecord.id },
+        data: {
+          quantity: {
+            increment: item.quantity
+          }
+        }
       });
     }
   }
@@ -73,7 +76,7 @@ const createInvoice = async (businessId, userId, userEmail, data) => {
     // 3. Process invoice items with backward compatibility fields (hours, rate, amount)
     const processedItems = pricing.processedItems.map((item) => {
       const orig = data.items.find(i => i.productId === item.productId || i.description === item.description) || {};
-      const base = {
+      return {
         ...item,
         hours: Number(orig.hours || 0),
         rate: Number(orig.rate || item.price),
@@ -81,12 +84,6 @@ const createInvoice = async (businessId, userId, userEmail, data) => {
         totalTax: item.total * (item.taxPercent / (100 + item.taxPercent)), // approximate tax amount in total
         totalAmount: item.total
       };
-      // Remove any leftover productId field
-      delete base.productId;
-      if (item.productId) {
-        base.product = { connect: { id: item.productId } };
-      }
-      return base;
     });
 
     // 4. Create Invoice
@@ -171,26 +168,22 @@ const convertSalesOrderToInvoice = async (businessId, userId, userEmail, salesOr
     const invoiceNumber = await generateDocNumber(tx, businessId, "INV", "invoice", "invoiceNumber");
 
     // 3. Process items copying from sales order, including backward compatibility fields
-    const processedItems = salesOrder.items.map((item) => {
-      const base = {
-        description: item.description,
-        itemType: item.itemType,
-        hsnSacCode: item.hsnSacCode,
-        quantity: item.quantity,
-        taxPercent: item.taxPercent,
-        taxDetails: item.taxDetails || [],
-        discount: item.discount || 0,
-        hours: 0,
-        rate: item.price,
-        amount: item.total,
-        totalTax: item.total * ((item.taxPercent || 0) / (100 + (item.taxPercent || 0))),
-        totalAmount: item.total
-      };
-      if (item.productId) {
-        base.product = { connect: { id: item.productId } };
-      }
-      return base;
-    });
+    const processedItems = salesOrder.items.map((item) => ({
+      productId: item.productId,
+      description: item.description,
+      itemType: item.itemType,
+      hsnSacCode: item.hsnSacCode,
+      quantity: item.quantity,
+      price: item.price,
+      taxPercent: item.taxPercent,
+      taxDetails: item.taxDetails || [],
+      discount: item.discount || 0,
+      hours: 0,
+      rate: item.price,
+      amount: item.total,
+      totalTax: item.total * ((item.taxPercent || 0) / (100 + (item.taxPercent || 0))),
+      totalAmount: item.total
+    }));
 
     // 4. Create Invoice
     const invoice = await tx.invoice.create({
@@ -281,7 +274,7 @@ const updateInvoice = async (businessId, userId, userEmail, invoiceId, data) => 
       // Process invoice items
       const processedItems = pricing.processedItems.map((item) => {
         const orig = data.items.find(i => i.productId === item.productId || i.description === item.description) || {};
-        const base = {
+        return {
           ...item,
           hours: Number(orig.hours || 0),
           rate: Number(orig.rate || item.price),
@@ -289,12 +282,6 @@ const updateInvoice = async (businessId, userId, userEmail, invoiceId, data) => 
           totalTax: item.total * (item.taxPercent / (100 + item.taxPercent)),
           totalAmount: item.total
         };
-        // Remove productId field regardless of its value
-        delete base.productId;
-        if (item.productId) {
-          base.product = { connect: { id: item.productId } };
-        }
-        return base;
       });
 
       // Delete old items

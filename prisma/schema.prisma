@@ -105,9 +105,18 @@ model Business {
     products Product[]
     journalEntries JournalEntry[]
     accounts Account[]
+    salesReturns SalesReturn[]
+    recurringInvoices RecurringInvoice[]
+    auditLogs AuditLog[]
+    notifications Notification[]
     
     timeEntries TimeEntry[]
     projects Project[]
+    notes Note[]
+    emailLogs EmailLog[]
+    campaigns Campaign[]
+    crmTasks CrmTask[]
+    leadConversionLogs LeadConversionLog[]
 }
 
   //////////////////////////////////////////////////////
@@ -154,6 +163,12 @@ model BusinessUser {
     projectMembers ProjectMember[]
     taskAssignees TaskAssignee[]
     timeEntries TimeEntry[]
+    customerOwner Customer[] @relation("CustomerOwner")
+    contactOwner CustomerContact[] @relation("ContactOwner")
+    createdNotes Note[] @relation("NoteCreatedBy")
+    crmTasksAssigned CrmTask[] @relation("CrmTaskAssignedTo")
+    crmTasksCreated CrmTask[] @relation("CrmTaskCreatedBy")
+    leadConversionLogs LeadConversionLog[]
 }
 
   //////////////////////////////////////////////////////
@@ -263,7 +278,29 @@ model Customer {
   shippingState   String?
   shippingZipCode String?
   shippingCountry String?
-    region     Region   // 🔥 ADD THIS
+  region          Region
+
+  //////////////////////////////////////////////////////
+  // UPGRADED CRM ACCOUNT FIELDS
+  //////////////////////////////////////////////////////
+  industry        String?
+  annualRevenue   Float?
+  employeeCount   Int?
+  accountOwnerId  String?
+  accountOwner    BusinessUser? @relation("CustomerOwner", fields: [accountOwnerId], references: [id])
+  accountType     CrmAccountType?
+  parentAccountId String?
+  parentAccount   Customer? @relation("CustomerParentChild", fields: [parentAccountId], references: [id], onDelete: SetNull)
+  childAccounts   Customer[] @relation("CustomerParentChild")
+  linkedinUrl     String?
+  facebookUrl     String?
+  twitterUrl      String?
+  tags            String[]
+  description     String?
+  lastContactedAt DateTime?
+  crmStatus       CrmStatus?
+  isDeleted       Boolean  @default(false)
+  deletedAt       DateTime?
 
   //////////////////////////////////////////////////////
   // STATUS + META
@@ -276,10 +313,13 @@ model Customer {
   // RELATIONS
   //////////////////////////////////////////////////////
   invoices        Invoice[]
-  leadId   String? @unique
+  leadId          String? @unique
   leads           Lead[]
 
   @@index([businessId])
+  @@index([accountOwnerId])
+  @@index([parentAccountId])
+  @@index([isDeleted])
   @@map("customers")
   creditNotes CreditNote[]
   customerContacts CustomerContact[]
@@ -289,6 +329,12 @@ model Customer {
   quotations Quotation[]
   salesOrders SalesOrder[]
   projects Project[]
+  notes       Note[]
+  emailLogs   EmailLog[]
+  crmTasks    CrmTask[]
+  leadConversionLogs LeadConversionLog[]
+  salesReturns SalesReturn[]
+  recurringInvoices RecurringInvoice[]
 }
 enum Region {
   INDIA
@@ -331,6 +377,12 @@ enum Region {
     business Business @relation(fields: [businessId], references: [id])
     customer Customer @relation(fields: [customerId], references: [id])
     
+    contactId        String?
+    contact          CustomerContact? @relation(fields: [contactId], references: [id])
+
+    quotationId   String?
+    quotation     Quotation? @relation(fields: [quotationId], references: [id])
+
     salesOrderId String?
     designTemplate String @default("modern")
 salesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id])
@@ -338,6 +390,11 @@ salesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id])
 
     projectId String?
 project   Project? @relation(fields: [projectId], references: [id])
+
+    isDeleted Boolean @default(false)
+    deletedAt DateTime?
+
+    salesReturns SalesReturn[]
 
     @@unique([businessId, invoiceNumber]) // invoice numbers unique per business
     @@index([businessId])
@@ -367,6 +424,11 @@ project   Project? @relation(fields: [projectId], references: [id])
   totalTax    Float   @default(0)
   totalAmount Float   @default(0)
     amount  Float 
+
+    productId    String?
+    product      Product? @relation(fields: [productId], references: [id])
+    discount     Float    @default(0)
+
     createdAt   DateTime @default(now())
     invoice Invoice @relation(fields: [invoiceId], references: [id])
 
@@ -375,7 +437,14 @@ project   Project? @relation(fields: [projectId], references: [id])
 enum InvoiceStatus {
   UNPAID
   PARTIALLY_PAID
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENT
+  PARTIAL_PAID
   PAID
+  OVERDUE
+  CANCELLED
 }
   //////////////////////////////////////////////////////
   // SUBSCRIPTIONS (Manual Billing Ready)
@@ -469,9 +538,12 @@ model CreditNote {
   invoiceId        String?   // nullable (credit may exist without invoice)
   vendorId         String?   // for bill credits
   business Business @relation(fields: [businessId], references: [id])
- customer Customer? @relation(fields: [customerId], references: [id])
+  customer Customer? @relation(fields: [customerId], references: [id])
   invoice  Invoice? @relation(fields: [invoiceId], references: [id])
   vendor   Vendor? @relation(fields: [vendorId], references: [id])
+  
+  salesReturnId String?
+  salesReturn   SalesReturn? @relation(fields: [salesReturnId], references: [id])
 
   ////////////////////////////////////////////////////
   // CREDIT DATA
@@ -484,6 +556,9 @@ model CreditNote {
   reason           String?
   status           CreditNoteStatus @default(OPEN)
   pdfUrl           String?
+
+  isDeleted        Boolean  @default(false)
+  deletedAt        DateTime?
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -692,6 +767,16 @@ model CustomerContact {
   isActive    Boolean  @default(true)
 
   //////////////////////////////////////////////////////
+  // CRM CONTACT UPGRADES
+  //////////////////////////////////////////////////////
+  isPrimary      Boolean       @default(false)
+  contactOwnerId String?
+  contactOwner   BusinessUser? @relation("ContactOwner", fields: [contactOwnerId], references: [id])
+  tags           String[]
+  isDeleted      Boolean       @default(false)
+  deletedAt      DateTime?
+
+  //////////////////////////////////////////////////////
   // META
   //////////////////////////////////////////////////////
   createdAt   DateTime @default(now())
@@ -699,7 +784,16 @@ model CustomerContact {
 
   @@index([customerId])
   @@index([businessId])
+  @@index([contactOwnerId])
+  @@index([isDeleted])
   deals Deal[]
+  activities Activity[]
+  notes      Note[]
+  emailLogs  EmailLog[]
+  crmTasks   CrmTask[]
+  quotations Quotation[]
+  salesOrders SalesOrder[]
+  invoices    Invoice[]
 }
 
 model Contract {
@@ -775,12 +869,31 @@ assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
   tasks           LeadTask[]
   reminders       LeadReminder[]
 
+  //////////////////////////////////////////////////////
+  // CRM LEAD UPGRADES
+  //////////////////////////////////////////////////////
+  score           Int           @default(0)
+  isDeleted       Boolean       @default(false)
+  deletedAt       DateTime?
+  campaignId      String?
+  campaign        Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   customers Customer[]
 
   activity Activity[]
+  crmNotes      Note[]
+  emailLogs     EmailLog[]
+  crmTasks      CrmTask[]
+  conversionLog LeadConversionLog?
+
+  @@index([businessId])
+  @@index([assignedToId])
+  @@index([stageId])
+  @@index([isDeleted])
+  @@index([campaignId])
 }
 
 model PipelineStage {
@@ -847,10 +960,21 @@ model Deal {
   expectedCloseDate DateTime?
 
   //////////////////////////////////////////////////////
+  // CRM DEAL PIPELINE UPGRADES
+  //////////////////////////////////////////////////////
+  status          DealStatus    @default(OPEN)
+  lostReason      String?
+  stageHistory    DealStageHistory[]
+  campaignId      String?
+  campaign        Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  isDeleted       Boolean       @default(false)
+  deletedAt       DateTime?
+
+  //////////////////////////////////////////////////////
   // META
   //////////////////////////////////////////////////////
   assignedToId String?
-assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
+  assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
   source     String?
   description String?
 
@@ -859,9 +983,16 @@ assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
 
   @@index([businessId])
   @@index([customerId])
+  @@index([contactId])
+  @@index([assignedToId])
+  @@index([campaignId])
+  @@index([isDeleted])
   activities Activity[]
   quotations Quotation[]
   salesOrders SalesOrder[]
+  notes       Note[]
+  emailLogs   EmailLog[]
+  crmTasks    CrmTask[]
 }
 
 model Activity {
@@ -876,7 +1007,7 @@ model Activity {
   //////////////////////////////////////////////////////
   // BASIC INFO
   //////////////////////////////////////////////////////
-  type        String   // Call, Meeting
+  type        String   // CALL, MEETING, TASK, EMAIL, NOTE
   title       String
   description String?
 
@@ -892,6 +1023,9 @@ model Activity {
   customerId  String?
   customer    Customer? @relation(fields: [customerId], references: [id])
 
+  contactId   String?
+  contact     CustomerContact? @relation(fields: [contactId], references: [id])
+
   //////////////////////////////////////////////////////
   // ASSIGNED USER (BusinessUser)
   //////////////////////////////////////////////////////
@@ -899,10 +1033,23 @@ model Activity {
   assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
 
   //////////////////////////////////////////////////////
-  // DATE
+  // DATE & DETAILS
   //////////////////////////////////////////////////////
   activityDate DateTime
   duration     Int?
+
+  //////////////////////////////////////////////////////
+  // CRM ACTIVITY UPGRADES
+  //////////////////////////////////////////////////////
+  priority     String?   // HIGH, MEDIUM, LOW
+  dueDate      DateTime?
+  reminderAt   DateTime?
+  outcome      String?   // Connected, Left Message, No Answer, etc.
+  meetingLink  String?
+  attendees    Json?     // List of attendees
+  isAllDay     Boolean   @default(false)
+  isDeleted    Boolean   @default(false)
+  deletedAt    DateTime?
 
   //////////////////////////////////////////////////////
   // STATUS
@@ -916,157 +1063,154 @@ model Activity {
   updatedAt    DateTime @updatedAt
 
   @@index([businessId])
+  @@index([leadId])
+  @@index([dealId])
+  @@index([customerId])
+  @@index([contactId])
+  @@index([assignedToId])
+  @@index([isDeleted])
 }
 
 model Quotation {
-  id            String   @id @default(uuid())
+  id               String          @id @default(uuid())
+  businessId       String
+  business         Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  quoteNumber      String          @unique
+  title            String?
+  
+  customerId       String
+  customer         Customer        @relation(fields: [customerId], references: [id])
+  
+  contactId        String?
+  contact          CustomerContact? @relation(fields: [contactId], references: [id])
+  
+  dealId           String?
+  deal             Deal?           @relation(fields: [dealId], references: [id])
+  
+  assignedToId     String?
+  assignedTo       BusinessUser?   @relation(fields: [assignedToId], references: [id])
+  
+  status           QuotationStatus @default(DRAFT)
+  
+  subtotal         Float           @default(0)
+  tax              Float           @default(0)
+  discount         Float           @default(0)
+  totalAmount      Float           @default(0)
+  
+  currency         String          @default("INR")
+  termsConditions  String?
+  issueDate        DateTime        @default(now())
+  expiryDate       DateTime?
+  notes            String?
+  
+  isDeleted        Boolean         @default(false)
+  deletedAt        DateTime?
+  
+  items            QuotationItem[]
+  salesOrders      SalesOrder[]
+  invoices         Invoice[]
 
-  //////////////////////////////////////////////////////
-  // BUSINESS
-  //////////////////////////////////////////////////////
-  businessId    String
-  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-
-  //////////////////////////////////////////////////////
-  // BASIC INFO
-  //////////////////////////////////////////////////////
-  quoteNumber   String   @unique
-  title         String?
-
-  //////////////////////////////////////////////////////
-  // RELATIONS
-  //////////////////////////////////////////////////////
-  customerId    String
-  customer      Customer @relation(fields: [customerId], references: [id])
-
-  dealId        String?
-  deal          Deal? @relation(fields: [dealId], references: [id])
-
-  assignedToId  String?
-  assignedTo    BusinessUser? @relation(fields: [assignedToId], references: [id])
-
-  //////////////////////////////////////////////////////
-  // STATUS
-  //////////////////////////////////////////////////////
-  status        String   @default("Draft")
-
-  //////////////////////////////////////////////////////
-  // PRICING
-  //////////////////////////////////////////////////////
-  subtotal      Float
-  tax           Float?
-  discount      Float?
-  totalAmount   Float
-
-  //////////////////////////////////////////////////////
-  // DATES
-  //////////////////////////////////////////////////////
-  issueDate     DateTime
-  expiryDate    DateTime?
-
-  //////////////////////////////////////////////////////
-  // NOTES
-  //////////////////////////////////////////////////////
-  notes         String?
-
-  //////////////////////////////////////////////////////
-  // RELATION
-  //////////////////////////////////////////////////////
-  items         QuotationItem[]
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   @@index([businessId])
-  salesOrders SalesOrder[]
+  @@index([customerId])
+  @@index([dealId])
+  @@index([isDeleted])
 }
 
 model QuotationItem {
-  id           String   @id @default(uuid())
-
+  id           String    @id @default(uuid())
   quotationId  String
   quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-
+  
+  productId    String?
+  product      Product?  @relation(fields: [productId], references: [id])
+  
   description  String
-  itemType     String?  @default("GOODS")
+  itemType     String?   @default("GOODS")
   hsnSacCode   String?
   quantity     Float
   price        Float
-  taxPercent   Float?   @default(0)
+  taxPercent   Float?    @default(0)
+  taxDetails   Json?
+  discount     Float?    @default(0)
   total        Float
+  
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 model SalesOrder {
-  id            String   @id @default(uuid())
+  id               String           @id @default(uuid())
+  businessId       String
+  business         Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  orderNumber      String           @unique
+  
+  customerId       String
+  customer         Customer         @relation(fields: [customerId], references: [id])
+  
+  contactId        String?
+  contact          CustomerContact? @relation(fields: [contactId], references: [id])
+  
+  quotationId      String?
+  quotation        Quotation?       @relation(fields: [quotationId], references: [id])
+  
+  dealId           String?
+  deal             Deal?            @relation(fields: [dealId], references: [id])
+  
+  assignedToId     String?
+  assignedTo       BusinessUser?    @relation(fields: [assignedToId], references: [id])
+  
+  status           SalesOrderStatus @default(DRAFT)
+  
+  subtotal         Float            @default(0)
+  tax              Float            @default(0)
+  discount         Float            @default(0)
+  totalAmount      Float            @default(0)
+  
+  currency         String           @default("INR")
+  termsConditions  String?
+  orderDate        DateTime         @default(now())
+  deliveryDate     DateTime?
+  notes            String?
+  
+  isDeleted        Boolean          @default(false)
+  deletedAt        DateTime?
+  
+  items            SalesOrderItem[]
+  invoices         Invoice[]
+  salesReturns     SalesReturn[]
 
-  //////////////////////////////////////////////////////
-  // BUSINESS
-  //////////////////////////////////////////////////////
-  businessId    String
-  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-
-  //////////////////////////////////////////////////////
-  // BASIC
-  //////////////////////////////////////////////////////
-  orderNumber   String   @unique
-  status        String   @default("Draft")
-
-  //////////////////////////////////////////////////////
-  // RELATIONS
-  //////////////////////////////////////////////////////
-  customerId    String
-  customer      Customer @relation(fields: [customerId], references: [id])
-
-  quotationId   String?
-  quotation     Quotation? @relation(fields: [quotationId], references: [id])
-
-  dealId        String?
-  deal          Deal? @relation(fields: [dealId], references: [id])
-
-  assignedToId  String?
-  assignedTo    BusinessUser? @relation(fields: [assignedToId], references: [id])
-
-  //////////////////////////////////////////////////////
-  // PRICING
-  //////////////////////////////////////////////////////
-  subtotal      Float
-  tax           Float?
-  discount      Float?
-  totalAmount   Float
-
-  //////////////////////////////////////////////////////
-  // DATES
-  //////////////////////////////////////////////////////
-  orderDate     DateTime
-  deliveryDate  DateTime?
-
-  //////////////////////////////////////////////////////
-  // NOTES
-  //////////////////////////////////////////////////////
-  notes         String?
-
-  items         SalesOrderItem[]
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   @@index([businessId])
-  invoices Invoice[]
+  @@index([customerId])
+  @@index([quotationId])
+  @@index([isDeleted])
 }
 
 model SalesOrderItem {
-  id           String   @id @default(uuid())
-
+  id           String     @id @default(uuid())
   salesOrderId String
   salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
-
+  
+  productId    String?
+  product      Product?   @relation(fields: [productId], references: [id])
+  
   description  String
-  itemType     String?  @default("GOODS")
+  itemType     String?    @default("GOODS")
   hsnSacCode   String?
   quantity     Float
   price        Float
-  taxPercent   Float?   @default(0)
+  taxPercent   Float?     @default(0)
+  taxDetails   Json?
+  discount     Float?     @default(0)
   total        Float
+  
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 }
 
 model PurchaseOrder {
@@ -1231,6 +1375,11 @@ model Product {
   stock       Stock[]
 
   business    Business @relation(fields: [businessId], references: [id])
+  quotationItems QuotationItem[]
+  salesOrderItems SalesOrderItem[]
+  invoiceItems InvoiceItem[]
+  salesReturnItems SalesReturnItem[]
+  recurringInvoiceItems RecurringInvoiceItem[]
 
   @@index([businessId])
 }
@@ -1257,6 +1406,7 @@ model Warehouse {
   stock      Stock[]
 
   business   Business @relation(fields: [businessId], references: [id])
+  salesReturnItems SalesReturnItem[]
 }
 
 model Stock {
@@ -1544,4 +1694,397 @@ model TimeEntry {
 
   businessUser BusinessUser? @relation(fields: [businessUserId], references: [id])
   employee     Employee?     @relation(fields: [employeeId], references: [id])
+}
+
+enum CrmAccountType {
+  CUSTOMER
+  PARTNER
+  PROSPECT
+  RESELLER
+  VENDOR
+  OTHER
+}
+
+enum CrmStatus {
+  ACTIVE
+  INACTIVE
+  LEAD
+  PROSPECT
+  CHURNED
+}
+
+enum DealStatus {
+  OPEN
+  WON
+  LOST
+}
+
+model DealStageHistory {
+  id           String   @id @default(uuid())
+  dealId       String
+  deal         Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  fromStage    String
+  toStage      String
+  changedById  String?
+  changedAt    DateTime @default(now())
+
+  @@index([dealId])
+}
+
+model Note {
+  id           String   @id @default(uuid())
+  businessId   String
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  content      String   @db.Text
+  
+  // CRM Entity Links
+  leadId       String?
+  lead         Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  dealId       String?
+  deal         Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  customerId   String?
+  customer     Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  contactId    String?
+  contact      CustomerContact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  // Author details
+  createdById  String?
+  createdBy    BusinessUser? @relation("NoteCreatedBy", fields: [createdById], references: [id])
+  
+  attachments  Json?    // attachment URLs or info
+  isDeleted    Boolean  @default(false)
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([leadId])
+  @@index([dealId])
+  @@index([customerId])
+  @@index([contactId])
+  @@index([createdById])
+}
+
+model EmailLog {
+  id           String   @id @default(uuid())
+  businessId   String
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  subject      String
+  body         String   @db.Text
+  fromEmail    String
+  toEmail      String
+  status       String   // SENT, DELIVERED, OPENED, FAILED
+  sentAt       DateTime @default(now())
+
+  // CRM Links
+  leadId       String?
+  lead         Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  dealId       String?
+  deal         Deal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  customerId   String?
+  customer     Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  contactId    String?
+  contact      CustomerContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  attachments  Json?    // Array of attachment metadata
+  createdAt    DateTime @default(now())
+
+  @@index([businessId])
+  @@index([leadId])
+  @@index([dealId])
+  @@index([customerId])
+  @@index([contactId])
+}
+
+model Campaign {
+  id             String   @id @default(uuid())
+  businessId     String
+  business       Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name           String
+  type           String   // EMAIL, SOCIAL_MEDIA, PPC, EVENT, OTHER
+  status         String   // PLANNING, ACTIVE, COMPLETED, CANCELLED
+  
+  budget         Float?
+  actualCost     Float?
+  expectedRevenue Float?
+  
+  startDate      DateTime?
+  endDate        DateTime?
+  description    String?
+
+  leads          Lead[]
+  deals          Deal[]
+  
+  isDeleted      Boolean  @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([isDeleted])
+}
+
+model LeadConversionLog {
+  id             String       @id @default(uuid())
+  businessId     String
+  business       Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  leadId         String       @unique
+  lead           Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  contactId      String?
+  dealId         String?
+  convertedById  String?
+  convertedBy    BusinessUser? @relation(fields: [convertedById], references: [id])
+  convertedAt    DateTime     @default(now())
+
+  @@index([businessId])
+  @@index([leadId])
+  @@index([customerId])
+}
+
+model CrmTask {
+  id           String   @id @default(uuid())
+  businessId   String
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  title        String
+  description  String?  @db.Text
+  status       String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, DEFERRED
+  priority     String   @default("MEDIUM")  // LOW, MEDIUM, HIGH
+  dueDate      DateTime?
+  reminderAt   DateTime?
+  
+  // CRM Entity Links
+  leadId       String?
+  lead         Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  dealId       String?
+  deal         Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  customerId   String?
+  customer     Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  contactId    String?
+  contact      CustomerContact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  // Assignment
+  assignedToId String?
+  assignedTo   BusinessUser? @relation("CrmTaskAssignedTo", fields: [assignedToId], references: [id])
+  
+  createdById  String?
+  createdBy    BusinessUser? @relation("CrmTaskCreatedBy", fields: [createdById], references: [id])
+
+  isDeleted    Boolean  @default(false)
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([leadId])
+  @@index([dealId])
+  @@index([customerId])
+  @@index([contactId])
+  @@index([assignedToId])
+  @@index([createdById])
+  @@index([isDeleted])
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  ACCEPTED
+  EXPIRED
+  CANCELLED
+}
+
+enum SalesOrderStatus {
+  DRAFT
+  CONFIRMED
+  PROCESSING
+  PARTIALLY_FULFILLED
+  FULFILLED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  UPI
+  CREDIT_CARD
+  DEBIT_CARD
+  CHEQUE
+  ONLINE
+}
+
+model SalesReturn {
+  id                String            @id @default(uuid())
+  businessId        String
+  business          Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  customerId        String
+  customer          Customer          @relation(fields: [customerId], references: [id])
+  
+  invoiceId         String?
+  invoice           Invoice?          @relation(fields: [invoiceId], references: [id])
+  
+  salesOrderId      String?
+  salesOrder        SalesOrder?       @relation(fields: [salesOrderId], references: [id])
+  
+  returnNumber      String            @unique
+  status            SalesReturnStatus @default(PENDING)
+  
+  reason            String?
+  refundStatus      String            @default("PENDING") // PENDING, REFUNDED, CREDIT_NOTE_ISSUED
+  
+  subtotal          Float             @default(0)
+  tax               Float             @default(0)
+  totalAmount       Float             @default(0)
+  
+  items             SalesReturnItem[]
+  creditNotes       CreditNote[]
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([businessId])
+  @@index([customerId])
+  @@index([invoiceId])
+  @@map("sales_returns")
+}
+
+model SalesReturnItem {
+  id             String      @id @default(uuid())
+  salesReturnId  String
+  salesReturn    SalesReturn @relation(fields: [salesReturnId], references: [id], onDelete: Cascade)
+  
+  productId      String?
+  product        Product?    @relation(fields: [productId], references: [id])
+  
+  description    String
+  quantity       Float
+  price          Float
+  taxPercent     Float?      @default(0)
+  total          Float
+  
+  warehouseId    String?
+  warehouse      Warehouse?  @relation(fields: [warehouseId], references: [id])
+  isStockReturned Boolean    @default(false)
+  
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@map("sales_return_items")
+}
+
+enum SalesReturnStatus {
+  PENDING
+  RECEIVED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model RecurringInvoice {
+  id               String             @id @default(uuid())
+  businessId       String
+  business         Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  customerId       String
+  customer         Customer           @relation(fields: [customerId], references: [id])
+  
+  profileName      String
+  status           String             @default("ACTIVE") // ACTIVE, PAUSED, COMPLETED
+  
+  frequency        BillingFrequency   @default(MONTHLY)
+  startDate        DateTime
+  endDate          DateTime?
+  lastInvoiceDate  DateTime?
+  nextInvoiceDate  DateTime?
+  
+  currency         String             @default("INR")
+  subtotal         Float              @default(0)
+  totalTax         Float              @default(0)
+  discount         Float              @default(0)
+  grandTotal       Float              @default(0)
+  
+  notes            String?
+  terms            String?
+  
+  items            RecurringInvoiceItem[]
+  
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([businessId])
+  @@index([customerId])
+  @@map("recurring_invoices")
+}
+
+model RecurringInvoiceItem {
+  id                 String           @id @default(uuid())
+  recurringInvoiceId String
+  recurringInvoice   RecurringInvoice @relation(fields: [recurringInvoiceId], references: [id], onDelete: Cascade)
+  
+  productId          String?
+  product            Product?         @relation(fields: [productId], references: [id])
+  
+  description        String
+  itemType           String?          @default("GOODS")
+  quantity           Float
+  price              Float
+  taxPercent         Float?           @default(0)
+  taxDetails         Json?
+  total              Float
+  
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@map("recurring_invoice_items")
+}
+
+enum BillingFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId      String?
+  userEmail   String?
+  action      String
+  module      String
+  entityType  String
+  entityId    String?
+  details     Json?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([businessId])
+  @@index([module])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId      String?
+  title       String
+  message     String
+  type        String   @default("INFO")
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+  entityType  String?
+  entityId    String?
+  createdAt   DateTime @default(now())
+
+  @@index([businessId])
+  @@index([userId])
+  @@map("notifications")
 }

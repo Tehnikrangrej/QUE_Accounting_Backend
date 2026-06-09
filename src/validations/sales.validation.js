@@ -7,7 +7,7 @@ const lineItemSchema = z.object({
   itemType: z.enum(["GOODS", "SERVICE"]).default("GOODS"),
   hsnSacCode: z.string().optional().nullable(),
   quantity: z.number().optional().default(0),
-  price: z.number().optional().default(0),
+  price: z.number().nonnegative("Price cannot be negative").optional().default(0),
   taxPercent: z.number().nonnegative("Tax percent cannot be negative").default(0),
   taxDetails: z.array(
     z.object({

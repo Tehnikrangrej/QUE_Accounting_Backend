@@ -39,11 +39,13 @@ const stockRoutes = require("./routes/stockRoutes");
 const productRoutes = require("./routes/productRoutes");
 const accontRoutes = require("./routes/accountRoutes");
 const journalEntryRoutes = require("./routes/journalRoutes");
-const reportRoutes = require("./routes/reportRoutes"); 
+const reportRoutes = require("./routes/reportRoutes");
 const projectRoutes = require("./routes/projectRoutes");
 const taskRoutes = require("./routes/taskRoutes");
 const timesRoutes = require("./routes/timesRoutes");
 const invoiceMetaRoutes = require("./routes/invoiceMeta.routes");
+
+// Phase2 (HEAD) routes
 const erpRoutes = require("./routes/erpRoutes");
 const purchaseRoutes = require("./routes/purchaseRoutes");
 const campaignRoutes = require("./routes/campaignRoutes");
@@ -52,6 +54,7 @@ const legacyCrmTaskRoutes = require("./routes/crmTaskRoutes");
 const noteRoutes = require("./routes/noteRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 
+// origin/main sales module routes
 const salesReturnRoutes = require("./routes/salesReturnRoutes");
 const recurringInvoiceRoutes = require("./routes/recurringInvoiceRoutes");
 const salesReportRoutes = require("./routes/salesReportRoutes");
@@ -82,13 +85,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ── Core Routes ───────────────────────────────────────────────────────────────
 app.use("/api/auth", authRoutes);
 app.use("/api/business", businessRoutes);
-app.use("/api/purchase", purchaseRoutes); // New unified purchase routes
+app.use("/api/purchase", purchaseRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/subscriptions", subscriptionRoutes);
-app.use("/api/user-management",userManagementRoutes);
+app.use("/api/user-management", userManagementRoutes);
 app.use("/api/permissions", permissionRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/check-email", checkByEmailRoutes);
@@ -96,13 +100,13 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/erp", erpRoutes);
 app.use("/api/credit-notes", creditNoteRoutes);
 app.use("/api/modules", moduleRoutes);
-app.use("/api/ledger",customerLedgerRoutes);
+app.use("/api/ledger", customerLedgerRoutes);
 app.use("/api/employees", employeeRoutes);
 app.use("/api/payrolls", payrollRoutes);
 app.use("/api/leaves", leaveRoutes);
-app.use("/api/bankchanges", bankChangeRoutes); 
-app.use("/api/overtime", overtiemeRoutes); 
-app.use("/api/loans", loanRoutes); 
+app.use("/api/bankchanges", bankChangeRoutes);
+app.use("/api/overtime", overtiemeRoutes);
+app.use("/api/loans", loanRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/vendors", vendorRoutes);
 app.use("/api/dashboard", dashboardRoutes);
@@ -126,17 +130,20 @@ app.use("/api/projects", projectRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/time-entries", timesRoutes);
 app.use("/api/invoice-meta", invoiceMetaRoutes);
+
+// ── Phase2 CRM (legacy) ───────────────────────────────────────────────────────
 app.use("/api/campaigns", campaignRoutes);
 app.use("/api/email-logs", emailLogRoutes);
 app.use("/api/crm-tasks", legacyCrmTaskRoutes);
 app.use("/api/crm-notes", noteRoutes);
 app.use("/api/notifications", notificationRoutes);
 
+// ── Sales Module (origin/main) ────────────────────────────────────────────────
 app.use("/api/sales-returns", salesReturnRoutes);
 app.use("/api/recurring-invoices", recurringInvoiceRoutes);
 app.use("/api/sales-reports", salesReportRoutes);
 
-// Upgraded CRM Mounts
+// ── Upgraded CRM Mounts ───────────────────────────────────────────────────────
 app.use("/api/crm-notes", crmNoteRoutes);
 app.use("/api/crm-campaigns", crmCampaignRoutes);
 app.use("/api/crm-email-logs", crmEmailLogRoutes);
@@ -163,7 +170,6 @@ app.get("/", (req, res) => {
 
 app.use((err, req, res, next) => {
   console.error("GLOBAL ERROR:", err);
-
   res.status(500).json({
     success: false,
     message: err.message || "Internal server error",
