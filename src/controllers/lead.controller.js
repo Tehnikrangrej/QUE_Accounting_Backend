@@ -315,9 +315,27 @@ exports.convertToCustomer = async (req, res) => {
           shippingZipCode: data.shippingZipCode,
           shippingCountry: data.shippingCountry,
 
-          leadId: lead.id
+          leadId: lead.id,
+          region: data.region || "INDIA" // Required field from schema based on frontend
         }
       });
+
+      // ✅ CREATE DEAL IF REQUESTED
+      if (data.createDeal && data.dealName) {
+        await tx.deal.create({
+          data: {
+            businessId: req.business.id,
+            customerId: customer.id,
+            name: data.dealName,
+            amount: data.dealAmount ? parseFloat(data.dealAmount) : 0,
+            currency: data.currency || "INR",
+            stage: data.dealStage || "New",
+            expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : null,
+            source: lead.source,
+            assignedToId: lead.assignedToId
+          }
+        });
+      }
 
       // ✅ UPDATE LEAD
       await tx.lead.update({

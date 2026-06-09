@@ -8,6 +8,7 @@ const vendorController = require("../controllers/vendor");
 const poController = require("../controllers/PO.Controller");
 const billController = require("../controllers/BillController");
 const erpController = require("../controllers/erpController");
+const prController = require("../controllers/purchaseRequestController");
 
 // Vendors
 router.get("/vendors", auth, business, vendorController.getVendors);
@@ -15,6 +16,12 @@ router.post("/vendors", auth, business, checkPermission("vendor", "create"), ven
 router.get("/vendors/:id", auth, business, vendorController.getVendor);
 router.put("/vendors/:id", auth, business, checkPermission("vendor", "update"), vendorController.updateVendor);
 router.delete("/vendors/:id", auth, business, checkPermission("vendor", "delete"), vendorController.deleteVendor);
+
+// Purchase Requests
+router.get("/requests", auth, business, prController.getPurchaseRequests);
+router.post("/requests", auth, business, checkPermission("purchase_order", "create"), prController.createPurchaseRequest);
+router.get("/requests/:id", auth, business, prController.getPurchaseRequestById);
+router.put("/requests/:id", auth, business, checkPermission("purchase_order", "update"), prController.updatePurchaseRequest);
 
 // Purchase Orders
 router.get("/orders", auth, business, poController.getPurchaseOrders);

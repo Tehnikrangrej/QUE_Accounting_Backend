@@ -112,7 +112,7 @@ exports.createInvoice = async (req, res) => {
 
         invoiceItems.push({
           productId: item.productId,
-          warehouseId: item.warehouseId,
+          warehouseId: item.warehouseId || null,
           description: item.description,
           hsnSacCode: item.hsnSacCode || item.taxCode || null,
           itemType: item.itemType || 'GOODS',
@@ -122,6 +122,7 @@ exports.createInvoice = async (req, res) => {
           rate: Number(item.rate),
           amount: effectiveSubtotal,
           taxDetails: taxResult.breakdown,
+          taxPercent: Number(item.taxPercent || 0),
           totalTax: taxResult.totalTaxAmount,
           totalAmount: effectiveSubtotal + taxResult.totalTaxAmount,
           discount: Number(item.discount || 0)
@@ -188,6 +189,9 @@ exports.createInvoice = async (req, res) => {
           }
         },
       });
+    }, {
+      maxWait: 5000,
+      timeout: 20000
     });
 
     // PDF generation (async)
@@ -293,7 +297,22 @@ exports.updateInvoice = async (req, res) => {
       adminNote,
       terms,
       currency,
-      designTemplate
+      designTemplate,
+      shippingCharges = 0,
+      status,
+      // India fields
+      cgst,
+      sgst,
+      igst,
+      tds,
+      ewayBillNo,
+      reverseCharge,
+      transportDetails,
+      // UAE fields
+      vatPercentage,
+      vatAmount,
+      vatType,
+      emirate
     } = req.body;
 
     let subtotal = 0;
@@ -331,12 +350,13 @@ exports.updateInvoice = async (req, res) => {
         rate: Number(i.rate),
         amount,
         taxDetails,
+        taxPercent: Number(i.taxPercent || 0),
         totalTax: itemTax,
         totalAmount: amount + itemTax,
       };
     });
 
-    const grandTotal = subtotal + totalTax - Number(discount);
+    const grandTotal = subtotal + totalTax + Number(shippingCharges) - Number(discount) - Number(tds || 0);
 
     const updatedInvoice = await prisma.$transaction(async (tx) => {
       await tx.invoiceItem.deleteMany({ where: { invoiceId } });
@@ -359,6 +379,19 @@ exports.updateInvoice = async (req, res) => {
           terms,
           currency,
           designTemplate,
+          status,
+          shippingCharges: Number(shippingCharges),
+          cgst: cgst !== undefined ? Number(cgst) : undefined,
+          sgst: sgst !== undefined ? Number(sgst) : undefined,
+          igst: igst !== undefined ? Number(igst) : undefined,
+          tds: tds !== undefined ? Number(tds) : undefined,
+          ewayBillNo,
+          reverseCharge: reverseCharge !== undefined ? !!reverseCharge : undefined,
+          transportDetails,
+          vatPercentage: vatPercentage !== undefined ? Number(vatPercentage) : undefined,
+          vatAmount: vatAmount !== undefined ? Number(vatAmount) : undefined,
+          vatType,
+          emirate,
         },
         include: { customer: true, items: true },
       });
@@ -416,6 +449,38 @@ exports.deleteInvoice = async (req, res) => {
 //////////////////////////////////////////////////////
 // GENERATE PDF (MANUAL)
 //////////////////////////////////////////////////////
+exports.previewInvoice = async (req, res) => {
+  try {
+    const { designTemplate, customerId, items, ...rest } = req.body;
+    
+    // Fetch customer and settings for real data
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, businessId: req.business.id },
+    });
+
+    const settings = await prisma.settings.findUnique({
+      where: { businessId: req.business.id },
+    });
+
+    // Mock an invoice object for the template
+    const mockInvoice = {
+      ...rest,
+      designTemplate: designTemplate || "modern",
+      customer: customer || { company: "Customer Name", name: "Customer Name" },
+      items: (items || []).map(it => ({
+        ...it,
+        totalAmount: Number(it.quantity || 0) * Number(it.rate || 0),
+        taxDetails: [] // Simplified for preview
+      }))
+    };
+
+    const html = require("../templates/invoiceTemplate")(mockInvoice, settings || {});
+    res.json({ success: true, html });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 exports.generateInvoicePdf = async (req, res) => {
   try {
     const { id } = req.params;

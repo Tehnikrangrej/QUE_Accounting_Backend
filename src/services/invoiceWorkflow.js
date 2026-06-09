@@ -25,7 +25,7 @@ class InvoiceWorkflow {
         throw new Error("Sales Order not found.");
       }
 
-      if (salesOrder.status === "Invoiced") {
+      if (salesOrder.status === "INVOICED") {
         throw new Error("Invoice already created for this Sales Order.");
       }
 
@@ -93,7 +93,7 @@ class InvoiceWorkflow {
       // 4. Update Sales Order Status to show completion
       await tx.salesOrder.update({
         where: { id: salesOrderId },
-        data: { status: "Invoiced" }
+        data: { status: "INVOICED" }
       });
 
       // 5. Release Reserved quantities and deduct physical stock (Sales Flow Shipment)
@@ -122,12 +122,16 @@ class InvoiceWorkflow {
               salesOrderId: salesOrder.id,
               invoiceId: invoice.id
             },
-            performedBy
+            performedBy,
+            tx
           });
         }
       }
 
       return invoice;
+    }, {
+      maxWait: 5000, // default
+      timeout: 20000 // 20 seconds
     });
   }
 }

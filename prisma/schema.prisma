@@ -283,6 +283,7 @@ model Invoice {
   subtotal        Float            @default(0)
   terms           String?
   totalTax        Float            @default(0)
+  shippingCharges Float            @default(0)
   updatedAt       DateTime         @updatedAt
   pdfUrl          String?
   salesOrderId    String?
@@ -337,6 +338,7 @@ model InvoiceItem {
   taxDetails  Json?
   totalAmount Float      @default(0)
   totalTax    Float      @default(0)
+  taxPercent  Float      @default(0)
   hsnSacCode  String?
   itemType    String?
   unit        String?
@@ -393,6 +395,7 @@ model Settings {
   overtimeThreshold Float    @default(2)
   currency          String   @default("INR")
   currencySymbol    String   @default("₹")
+  invoiceTemplate   String   @default("modern")
   busniess          Business @relation(fields: [businessId], references: [id])
   users             User[]   @relation("SettingsToUser")
 }
@@ -1032,6 +1035,29 @@ model SalesOrder {
   deletedAt       DateTime?
   isDeleted       Boolean          @default(false)
   termsConditions String?
+  shippingCharges Float?           @default(0)
+  customerReference String?
+  shippingMethod    String?
+  paymentTerms      String?
+  deliveryInstructions String?
+
+  // India specific fields
+  cgst            Float?
+  sgst            Float?
+  igst            Float?
+  tds             Float?
+  ewayBillNo      String?
+  reverseCharge   Boolean          @default(false)
+  transportDetails String?
+  placeOfSupply   String?
+  taxType         String?          // "GST" or "IGST" or "VAT"
+
+  // UAE specific fields
+  vatPercentage   Float?
+  vatAmount       Float?
+  vatType         String?          // "inclusive" or "exclusive"
+  emirate         String?
+
   status          SalesOrderStatus @default(DRAFT)
   assignedTo      BusinessUser?    @relation(fields: [assignedToId], references: [id])
   business        Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
@@ -1059,6 +1085,9 @@ model SalesOrderItem {
   hsnSacCode   String?
   itemType     String?    @default("GOODS")
   taxPercent   Float?     @default(0)
+  cgstPercent  Float?     @default(0)
+  sgstPercent  Float?     @default(0)
+  igstPercent  Float?     @default(0)
   unit         String?
   createdAt    DateTime   @default(now())
   discount     Float?     @default(0)
@@ -1684,12 +1713,14 @@ model notifications {
 }
 
 model purchase_request_items {
-  id                String            @id
+  id                String            @id @default(uuid())
   purchaseRequestId String
   productId         String
   description       String?
   quantity          Float
   estimatedPrice    Float?            @default(0)
+  itemType          String?
+  hsnSacCode        String?
   Product           Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
   purchase_requests purchase_requests @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
 }
@@ -2152,6 +2183,7 @@ enum SalesOrderStatus {
   PROCESSING
   PARTIALLY_FULFILLED
   FULFILLED
+  INVOICED
   CANCELLED
 }
 

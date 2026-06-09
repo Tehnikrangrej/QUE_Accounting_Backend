@@ -2,7 +2,7 @@ const prisma = require("../config/prisma");
 const InventoryService = require("../services/inventoryService");
 const TaxEngine = require("../services/taxEngine");
 
-const VALID_STATUS = ["DRAFT", "Draft", "CONFIRMED", "Confirmed", "PROCESSING", "Processing", "FULFILLED", "Completed", "CANCELLED", "Cancelled", "APPROVED", "Approved", "PARTIALLY_FULFILLED"];
+const VALID_STATUS = ["DRAFT", "Draft", "CONFIRMED", "Confirmed", "PROCESSING", "Processing", "FULFILLED", "Completed", "INVOICED", "Invoiced", "CANCELLED", "Cancelled", "APPROVED", "Approved", "PARTIALLY_FULFILLED"];
 
 //////////////////////////////////////////////////////
 // GENERATE ORDER NUMBER
@@ -301,6 +301,7 @@ exports.updateSalesOrder = async (req, res) => {
         'Approved': 'APPROVED',
         'Partially Fulfilled': 'PARTIALLY_FULFILLED',
         'Fulfilled': 'FULFILLED',
+        'Invoiced': 'INVOICED',
         'Cancelled': 'CANCELLED'
       };
       normalizedStatus = statusMap[status] || status.toUpperCase();

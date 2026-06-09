@@ -46,6 +46,11 @@ const timesRoutes = require("./routes/timesRoutes");
 const invoiceMetaRoutes = require("./routes/invoiceMeta.routes");
 const erpRoutes = require("./routes/erpRoutes");
 const purchaseRoutes = require("./routes/purchaseRoutes");
+const campaignRoutes = require("./routes/campaignRoutes");
+const emailLogRoutes = require("./routes/emailLogRoutes");
+const crmTaskRoutes = require("./routes/crmTaskRoutes");
+const noteRoutes = require("./routes/noteRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
 
 const app = express();
 
@@ -96,6 +101,11 @@ app.use("/api/projects", projectRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/time-entries", timesRoutes);
 app.use("/api/invoice-meta", invoiceMetaRoutes);
+app.use("/api/campaigns", campaignRoutes);
+app.use("/api/email-logs", emailLogRoutes);
+app.use("/api/crm-tasks", crmTaskRoutes);
+app.use("/api/crm-notes", noteRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 app.get("/", (req, res) => {
   res.send("QUE Accounting Backend Running...");
