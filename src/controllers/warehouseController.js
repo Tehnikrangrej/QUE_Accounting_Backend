@@ -41,11 +41,19 @@ exports.createWarehouse = async (req, res) => {
 // GET ALL
 //////////////////////////////////////////////////////
 exports.getWarehouses = async (req, res) => {
-  const data = await prisma.warehouse.findMany({
-    where: { businessId: req.business.id },
-  });
+  try {
+    const data = await prisma.warehouse.findMany({
+      where: { businessId: req.business.id },
+    });
 
-  res.json({ success: true, warehouses: data });
+    res.json({ success: true, warehouses: data });
+  } catch (error) {
+    console.error("getWarehouses error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
 
 //////////////////////////////////////////////////////

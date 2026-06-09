@@ -1,12 +1,13 @@
 const prisma = require("../config/prisma");
+const PurchaseWorkflow = require("../services/purchaseWorkflow");
 
 const VALID_STATUS = ["Draft", "Ordered", "Received", "Cancelled"];
 
 //////////////////////////////////////////////////////
 // GENERATE PO NUMBER
 //////////////////////////////////////////////////////
-const generatePONumber = async () => {
-  const count = await prisma.purchaseOrder.count();
+const generatePONumber = async (businessId) => {
+  const count = await prisma.purchaseOrder.count({ where: { businessId } });
   return `PO-${(count + 1).toString().padStart(3, "0")}`;
 };
 
@@ -19,16 +20,12 @@ exports.createPurchaseOrder = async (req, res) => {
       vendorId,
       assignedToId,
       items,
-      tax = 0,
       discount = 0,
       orderDate,
       expectedDeliveryDate,
       notes,
     } = req.body;
 
-    //////////////////////////////////////////////////////
-    // VALIDATION
-    //////////////////////////////////////////////////////
     if (!vendorId || !items || items.length === 0) {
       return res.status(400).json({
         success: false,
@@ -36,105 +33,83 @@ exports.createPurchaseOrder = async (req, res) => {
       });
     }
 
-    //////////////////////////////////////////////////////
-    // VALIDATE VENDOR
-    //////////////////////////////////////////////////////
     const vendor = await prisma.vendor.findFirst({
-      where: {
-        id: vendorId,
-        businessId: req.business.id,
-      },
+      where: { id: vendorId, businessId: req.business.id },
     });
 
     if (!vendor) {
-      return res.status(400).json({
-        success: false,
-        message: "Vendor not found",
-      });
+      return res.status(400).json({ success: false, message: "Vendor not found" });
     }
 
-    //////////////////////////////////////////////////////
-    // VALIDATE ASSIGNED USER
-    //////////////////////////////////////////////////////
-    if (assignedToId) {
-      const member = await prisma.businessUser.findFirst({
-        where: {
-          id: assignedToId,
-          businessId: req.business.id,
-          isActive: true,
-        },
-      });
+    let subtotal = 0;
+    let totalTax = 0;
 
-      if (!member) {
-        return res.status(400).json({
-          success: false,
-          message: "Assigned user not part of this business",
-        });
-      }
-    }
+    const mappedItems = items.map(item => {
+      const lineAmount = Number(item.quantity) * Number(item.price);
+      const lineTax = (lineAmount * Number(item.taxPercent || 0)) / 100;
+      subtotal += lineAmount;
+      totalTax += lineTax;
 
-    //////////////////////////////////////////////////////
-    // CALCULATE TOTAL
-    //////////////////////////////////////////////////////
-    const subtotal = items.reduce(
-      (sum, item) => sum + item.quantity * item.price,
-      0
-    );
+      return {
+        productId: item.productId,
+        warehouseId: item.warehouseId,
+        description: item.description || item.name,
+        itemType: item.itemType || item.type || 'GOODS',
+        hsnSacCode: item.hsnSacCode || item.hsn,
+        quantity: Number(item.quantity),
+        price: Number(item.price),
+        taxPercent: Number(item.taxPercent || 0),
+        total: lineAmount + lineTax
+      };
+    });
 
-    const totalAmount = subtotal + tax - discount;
-
-    //////////////////////////////////////////////////////
-    // CREATE
-    //////////////////////////////////////////////////////
     const order = await prisma.purchaseOrder.create({
       data: {
         businessId: req.business.id,
-        poNumber: await generatePONumber(),
-
+        poNumber: await generatePONumber(req.business.id),
         vendorId,
         assignedToId,
-
         subtotal,
-        tax,
+        tax: totalTax,
         discount,
-        totalAmount,
-
+        totalAmount: subtotal + totalTax - discount,
         orderDate: new Date(orderDate),
-        expectedDeliveryDate: expectedDeliveryDate
-          ? new Date(expectedDeliveryDate)
-          : null,
-
+        expectedDeliveryDate: expectedDeliveryDate ? new Date(expectedDeliveryDate) : null,
         notes,
-
-        items: {
-          create: items.map((item) => ({
-            name: item.name,
-            type: item.type || null,
-            hsn: item.hsn || null,
-            quantity: item.quantity,
-            price: item.price,
-            taxPercent: Number(item.taxPercent || 0),
-            total: item.quantity * item.price,
-          })),
-        },
+        items: { create: mappedItems },
       },
-      include: {
-        vendor: true,
-        items: true,
-      },
+      include: { vendor: true, items: true },
     });
 
-    res.status(201).json({
-      success: true,
-      order,
-    });
+    res.status(201).json({ success: true, order });
 
   } catch (error) {
     console.error("createPurchaseOrder error:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+//////////////////////////////////////////////////////
+// RECEIVE GOODS (GRN Flow)
+//////////////////////////////////////////////////////
+exports.receiveGoods = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { items, grnNumber, note } = req.body;
+
+    const result = await PurchaseWorkflow.receiveGoods({
+      businessId: req.business.id,
+      purchaseOrderId: id,
+      grnNumber: grnNumber || `GRN-${Date.now()}`,
+      items,
+      performedBy: req.user.userId,
+      note
     });
+
+    res.json(result);
+  } catch (error) {
+    console.error("receiveGoods error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -148,9 +123,9 @@ exports.getPurchaseOrders = async (req, res) => {
         businessId: req.business.id,
       },
       include: {
-        vendor: true,
+        Vendor: true,
         items: true,
-        assignedTo: {
+        business_users: {
           include: { user: true },
         },
       },
@@ -185,9 +160,9 @@ exports.getPurchaseOrderById = async (req, res) => {
         businessId: req.business.id,
       },
       include: {
-        vendor: true,
+        Vendor: true,
         items: true,
-        assignedTo: {
+        business_users: {
           include: { user: true },
         },
       },
@@ -239,7 +214,7 @@ exports.updatePurchaseOrder = async (req, res) => {
       where: { id },
       data: req.body,
       include: {
-        vendor: true,
+        Vendor: true,
         items: true,
       },
     });

@@ -3,7 +3,6 @@ const auth = require("../middlewares/authMiddleware");
 const business = require("../middlewares/business.middleware");
 const checkPermission = require("../middlewares/checkPermission");
 const Controller = require("../controllers/stockController");
-const { bankChangeRequest } = require("../config/prisma");
 
 router.post(
     "/",
@@ -23,21 +22,18 @@ router.get(
   Controller.getStock
 );
 
-router.put(
-  "/:id",
+router.get(
+  "/movements",
   auth,
   business,
-  checkPermission("stock", "update"),
-  Controller.updateStock
+  Controller.getMovements
 );
 
-router.delete(
-  "/:id",
+router.post(
+  "/adjustments",
   auth,
-    business,
-    checkPermission("stock", "delete"),
-    Controller.deleteStock
+  business,
+  Controller.createAdjustment
 );
-
 
 module.exports = router;

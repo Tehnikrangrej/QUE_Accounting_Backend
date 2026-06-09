@@ -1,71 +1,114 @@
 const prisma = require("../config/prisma");
+const InventoryService = require("../services/inventoryService");
+const { fixStock } = require("../utils/dataFixer");
 
 //////////////////////////////////////////////////////
-// CREATE / UPDATE STOCK
+// CREATE / UPDATE STOCK (Manual Adjustment)
 //////////////////////////////////////////////////////
 exports.createStock = async (req, res) => {
   try {
-    const { productId, warehouseId, quantity } = req.body;
+    const { productId, warehouseId, quantity, note } = req.body;
 
-    const stock = await prisma.stock.create({
-      data: {
-        productId,
-        warehouseId,
-        quantity: Number(quantity),
+    const movement = await InventoryService.increaseStock({
+      businessId: req.business.id,
+      productId,
+      warehouseId,
+      quantity: Number(quantity),
+      type: "ADJUSTMENT",
+      performedBy: req.user.userId,
+      note: note || "Manual stock adjustment"
+    });
+
+    res.status(201).json({ success: true, movement });
+
+  } catch (error) {
+    console.error("getStock error:", error);
+    res.status(500).json({ success: false, message: "Error fetching stock: " + error.message });
+  }
+};
+
+//////////////////////////////////////////////////////
+// GET ALL STOCK (Business Scoped)
+//////////////////////////////////////////////////////
+exports.getStock = async (req, res) => {
+  try {
+    const stock = await prisma.stock.findMany({
+      where: {
+        warehouse: { businessId: req.business.id }
+      },
+      include: { 
+        product: {
+          include: {
+            units: true,
+            categories: true,
+            brands: true
+          }
+        }, 
+        warehouse: true 
       },
     });
 
-    res.status(201).json({ success: true, stock });
+    // Apply data fixer to ensure old records are consistent
+    const formattedStock = stock.map(s => fixStock(s));
 
+    res.json({ success: true, stock: formattedStock });
+  } catch (error) {
+    console.error("getStock error:", error);
+    res.status(500).json({ success: false, message: "Error fetching stock: " + error.message });
+  }
+};
+
+//////////////////////////////////////////////////////
+// GET MOVEMENTS
+//////////////////////////////////////////////////////
+exports.getMovements = async (req, res) => {
+  try {
+    const movements = await prisma.stockMovement.findMany({
+      where: { businessId: req.business.id },
+      include: { product: true, warehouse: true },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({ success: true, movements });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
 //////////////////////////////////////////////////////
-// GET ALL STOCK
+// CREATE ADJUSTMENT
 //////////////////////////////////////////////////////
-exports.getStock = async (req, res) => {
-  const stock = await prisma.stock.findMany({
-    include: { product: true, warehouse: true },
-  });
+exports.createAdjustment = async (req, res) => {
+  try {
+    const { productId, warehouseId, adjustmentType, quantity, reason, notes } = req.body;
+    const businessId = req.business.id;
+    const userId = req.user.userId || req.user.id;
 
-  res.json({ success: true, stock });
-};
+    let movement;
+    if (adjustmentType === "ADD") {
+      movement = await InventoryService.increaseStock({
+        businessId,
+        productId,
+        warehouseId,
+        quantity: Number(quantity),
+        type: "ADJUSTMENT_IN",
+        performedBy: userId,
+        note: notes || reason || "Stock Adjustment (Add)"
+      });
+    } else {
+      movement = await InventoryService.decreaseStock({
+        businessId,
+        productId,
+        warehouseId,
+        quantity: Number(quantity),
+        type: "ADJUSTMENT_OUT",
+        performedBy: userId,
+        note: notes || reason || "Stock Adjustment (Remove)"
+      });
+    }
 
-//////////////////////////////////////////////////////
-// UPDATE STOCK
-//////////////////////////////////////////////////////
-exports.updateStock = async (req, res) => {
-  const updated = await prisma.stock.updateMany({
-    where: { id: req.params.id },
-    data: req.body,
-  });
-
-  if (updated.count === 0) {
-    return res.status(404).json({
-      success: false,
-      message: "Stock not found",
-    });
+    res.status(201).json({ success: true, movement });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
-
-  res.json({ success: true, message: "Updated" });
-};
-
-//////////////////////////////////////////////////////
-// DELETE STOCK
-//////////////////////////////////////////////////////
-exports.deleteStock = async (req, res) => {
-  const deleted = await prisma.stock.deleteMany({
-    where: { id: req.params.id },
-  });
-
-  if (deleted.count === 0) {
-    return res.status(404).json({
-      success: false,
-      message: "Stock not found",
-    });
-  }
-
-  res.json({ success: true, message: "Deleted" });
 };

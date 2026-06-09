@@ -45,6 +45,7 @@ const calculatePricing = (items) => {
 
     return {
       productId: item.productId || null,
+      warehouseId: item.warehouseId || null,
       description: item.description,
       itemType: item.itemType || "GOODS",
       hsnSacCode: item.hsnSacCode || null,

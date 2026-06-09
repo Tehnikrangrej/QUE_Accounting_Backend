@@ -2,6 +2,7 @@ const prisma = require("../../config/prisma");
 const { logAction, triggerNotification } = require("./audit.service");
 const { generateDocNumber, calculatePricing } = require("./quotation.service");
 const { releaseStock } = require("./salesOrder.service");
+const { createStockMovement } = require("../inventory/movement.service");
 
 /**
  * Deducts stock from physical inventory upon dispatch (invoice creation)
@@ -18,17 +19,15 @@ const deductStock = async (tx, businessId, items, isFromReservation = false) => 
     });
 
     if (stockRecord) {
+      const reservedQtyDelta = isFromReservation ? -Math.min(stockRecord.reservedQty, item.quantity) : 0;
+
       const dataUpdate = {
-        quantity: {
-          decrement: item.quantity
-        }
+        quantity: { decrement: item.quantity }
       };
 
       if (isFromReservation) {
         const reservedDec = Math.min(stockRecord.reservedQty, item.quantity);
-        dataUpdate.reservedQty = {
-          decrement: reservedDec
-        };
+        dataUpdate.reservedQty = { decrement: reservedDec };
       }
 
       await tx.stock.update({

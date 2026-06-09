@@ -8,7 +8,9 @@ const {
   generateInvoicePdf,
   downloadInvoicePdf,
   bulkUpdateInvoices,
+  createInvoiceFromSalesOrder,
   convertSalesOrder,
+  previewInvoice,
   changeStatus,
 } = require("../controllers/invoiceController");
 const authMiddleware = require("../middlewares/authMiddleware");
@@ -18,37 +20,114 @@ const checkPermission = require("../middlewares/checkPermission");
 
 const router = express.Router();
 
-// Apply authentication middleware
+// Apply authentication middleware to all routes
 router.use(authMiddleware);
 
-// Get invoices
-router.get("/", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "read"), getInvoices);
+// ── Read ───────────────────────────────────────────────────────────────────
+router.get(
+  "/",
+  businessMiddleware,
+  checkBusinessSubscription,
+  checkPermission("invoice", "read"),
+  getInvoices
+);
 
-// Get invoice by ID
-router.get("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "read"), getInvoiceById);
+router.get(
+  "/:id",
+  businessMiddleware,
+  checkBusinessSubscription,
+  checkPermission("invoice", "read"),
+  getInvoiceById
+);
 
-// Generate PDF
-router.post("/:id/generate-pdf", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), generateInvoicePdf);
+// ── Create ─────────────────────────────────────────────────────────────────
+router.post(
+  "/",
+  businessMiddleware,
+  checkBusinessSubscription,
+  checkPermission("invoice", "create"),
+  createInvoice
+);
 
-// Download PDF
-router.get("/:id/download-pdf", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "read"), downloadInvoicePdf);
+// Preview invoice HTML (no DB write)
+router.post(
+  "/preview",
+  businessMiddleware,
+  checkBusinessSubscription,
+  checkPermission("invoice", "create"),
+  previewInvoice
+);
 
-// Bulk Update
-router.post("/bulk-update", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), bulkUpdateInvoices);
+// Convert Sales Order → Invoice (legacy workflow route)
+router.post(
+  "/convert/:salesOrderId",
+  businessMiddleware,
+  checkBusinessSubscription,
+  checkPermission("invoice", "create"),
+  createInvoiceFromSalesOrder
+);
 
-// Create Invoice
-router.post("/", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "create"), createInvoice);
+// Convert Sales Order → Invoice (service-layer route)
+router.post(
+  "/convert-so/:salesOrderId",
+  businessMiddleware,
+  checkBusinessSubscription,
+  checkPermission("invoice", "create"),
+  convertSalesOrder
+);
 
-// Convert Sales Order to Invoice
-router.post("/convert/:salesOrderId", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "create"), convertSalesOrder);
+// Bulk PDF regeneration
+router.post(
+  "/bulk-update",
+  businessMiddleware,
+  checkBusinessSubscription,
+  checkPermission("invoice", "update"),
+  bulkUpdateInvoices
+);
 
-// Update Invoice status
-router.post("/:id/status", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), changeStatus);
+// ── Update ─────────────────────────────────────────────────────────────────
+router.patch(
+  "/:id",
+  businessMiddleware,
+  checkBusinessSubscription,
+  checkPermission("invoice", "update"),
+  updateInvoice
+);
 
-// Update Invoice fields
-router.patch("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "update"), updateInvoice);
+// Change status
+router.post(
+  "/:id/status",
+  businessMiddleware,
+  checkBusinessSubscription,
+  checkPermission("invoice", "update"),
+  changeStatus
+);
 
-// Delete Invoice
-router.delete("/:id", businessMiddleware, checkBusinessSubscription, checkPermission("invoice", "delete"), deleteInvoice);
+// Generate / regenerate PDF
+router.post(
+  "/:id/generate-pdf",
+  businessMiddleware,
+  checkBusinessSubscription,
+  checkPermission("invoice", "update"),
+  generateInvoicePdf
+);
+
+// ── Download ───────────────────────────────────────────────────────────────
+router.get(
+  "/:id/download-pdf",
+  businessMiddleware,
+  checkBusinessSubscription,
+  checkPermission("invoice", "read"),
+  downloadInvoicePdf
+);
+
+// ── Delete ─────────────────────────────────────────────────────────────────
+router.delete(
+  "/:id",
+  businessMiddleware,
+  checkBusinessSubscription,
+  checkPermission("invoice", "delete"),
+  deleteInvoice
+);
 
 module.exports = router;

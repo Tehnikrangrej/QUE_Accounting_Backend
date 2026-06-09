@@ -17,4 +17,28 @@ router.get(
   Controller.getProfitLoss
 );
 
+router.get(
+  "/stock-valuation",
+  auth,
+  business,
+  checkPermission("report", "read"),
+  Controller.getStockValuation
+);
+
+router.get(
+  "/low-stock-alerts",
+  auth,
+  business,
+  checkPermission("report", "read"),
+  Controller.getLowStockAlerts
+);
+
+router.get(
+  "/movement-summary",
+  auth,
+  business,
+  checkPermission("report", "read"),
+  Controller.getMovementSummary
+);
+
 module.exports = router;

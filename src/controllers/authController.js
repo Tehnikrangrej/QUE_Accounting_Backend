@@ -215,3 +215,48 @@ exports.getLoggedInUser = async (req, res) => {
     return errorResponse(res, "Internal server error");
   }
 };
+
+//////////////////////////////////////////////////////
+// UPDATE LOGGED-IN USER
+//////////////////////////////////////////////////////
+exports.updateUser = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { email, password } = req.body;
+
+    const data = {};
+    if (email) {
+      const exists = await prisma.user.findUnique({ where: { email } });
+      if (exists && exists.id !== userId) {
+        return errorResponse(res, "Email already exists");
+      }
+      data.email = email;
+    }
+    
+    if (password) {
+      data.password = await bcrypt.hash(password, 10);
+    }
+
+    if (Object.keys(data).length === 0) {
+       return errorResponse(res, "No data provided to update");
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isActive: true,
+        createdAt: true,
+      }
+    });
+
+    return successResponse(res, "User updated successfully", updatedUser);
+
+  } catch (error) {
+    console.error("Update user error:", error);
+    return errorResponse(res, "Internal server error");
+  }
+};

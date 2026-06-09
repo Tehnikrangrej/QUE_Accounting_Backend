@@ -182,7 +182,7 @@ exports.getLeadDetails = async (req, res) => {
       include: {
         stage: true,
         campaign: true,
-        activities: { where: { isDeleted: false }, orderBy: { createdAt: "desc" } },
+        activities: { orderBy: { createdAt: "desc" } },
         crmNotes: { where: { isDeleted: false }, orderBy: { createdAt: "desc" } },
         emailLogs: { orderBy: { sentAt: "desc" } },
         assignedTo: { include: { user: true } },

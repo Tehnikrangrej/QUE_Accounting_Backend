@@ -14,7 +14,7 @@ class CustomClient extends Client {
         return super.connect(callback);
       }
       this.host = address;
-      
+
       // Ensure servername is set to originalHost for TLS validation
       if (this.ssl && typeof this.ssl === "object") {
         this.ssl.servername = originalHost;
@@ -24,7 +24,7 @@ class CustomClient extends Client {
           servername: originalHost,
         };
       }
-      
+
       super.connect(callback);
     });
   }

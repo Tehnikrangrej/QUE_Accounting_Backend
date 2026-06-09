@@ -1,6 +1,7 @@
 const prisma = require("../../config/prisma");
 const { logAction, triggerNotification } = require("./audit.service");
 const { generateDocNumber, calculatePricing } = require("./quotation.service");
+const { reserveStock: reserveStockHelper, releaseReservedStock } = require("../inventory/movement.service");
 
 /**
  * Enterprise Stock Reservation logic
@@ -9,16 +10,27 @@ const reserveStock = async (tx, businessId, items) => {
   for (const item of items) {
     if (!item.productId) continue;
 
-    // Find stock record in any warehouse for this business
+    if (!item.warehouseId) {
+      // Skip stock reservation for service items without a warehouse
+      continue;
+    }
+
     const stockRecord = await tx.stock.findFirst({
       where: {
         productId: item.productId,
-        warehouse: { businessId }
+        warehouseId: item.warehouseId
       }
     });
 
     if (!stockRecord) {
-      throw new Error(`No warehouse stock record found for product sku/id ${item.productId}`);
+      // Initialize stock record if it doesn't exist
+      await tx.stock.create({
+        data: {
+          productId: item.productId,
+          warehouseId: item.warehouseId
+        }
+      });
+      continue;
     }
 
     const available = stockRecord.quantity - stockRecord.reservedQty;
@@ -26,13 +38,10 @@ const reserveStock = async (tx, businessId, items) => {
       throw new Error(`Insufficient stock for product ID ${item.productId}. Available: ${available}, Requested: ${item.quantity}`);
     }
 
-    // Atomically increment reservedQty
     await tx.stock.update({
       where: { id: stockRecord.id },
       data: {
-        reservedQty: {
-          increment: item.quantity
-        }
+        reservedQty: { increment: item.quantity }
       }
     });
   }
@@ -43,7 +52,7 @@ const reserveStock = async (tx, businessId, items) => {
  */
 const releaseStock = async (tx, businessId, items) => {
   for (const item of items) {
-    if (!item.productId) continue;
+    if (!item.productId || !item.warehouseId) continue;
 
     const stockRecord = await tx.stock.findFirst({
       where: {
@@ -57,9 +66,7 @@ const releaseStock = async (tx, businessId, items) => {
       await tx.stock.update({
         where: { id: stockRecord.id },
         data: {
-          reservedQty: {
-            decrement: decrementQty
-          }
+          reservedQty: { decrement: decrementQty }
         }
       });
     }
@@ -264,7 +271,7 @@ const updateSalesOrder = async (businessId, userId, userEmail, orderId, data) =>
         contactId: data.contactId !== undefined ? data.contactId : existing.contactId,
         dealId: data.dealId !== undefined ? data.dealId : existing.dealId,
         assignedToId: data.assignedToId !== undefined ? data.assignedToId : existing.assignedToId,
-        status: data.status || existing.status,
+        status: data.status ? data.status.toUpperCase() : existing.status,
         subtotal: pricing.subtotal !== undefined ? pricing.subtotal : existing.subtotal,
         tax: pricing.tax !== undefined ? pricing.tax : existing.tax,
         discount: pricing.discount !== undefined ? pricing.discount : existing.discount,
@@ -378,7 +385,7 @@ const changeStatus = async (businessId, userId, userEmail, orderId, status) => {
 
     const updated = await tx.salesOrder.update({
       where: { id: orderId },
-      data: { status }
+      data: { status: status.toUpperCase() }
     });
 
     // If order is cancelled, release reserved stock
