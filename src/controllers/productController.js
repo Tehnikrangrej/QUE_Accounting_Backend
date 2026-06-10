@@ -5,6 +5,8 @@ const productService = require("../services/inventory/product.service");
 
 // ==========================================
 // CATEGORY CONTROLLER
+
+
 // ==========================================
 
 exports.createCategory = async (req, res) => {
