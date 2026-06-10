@@ -307,7 +307,7 @@ model Customer {
   creditNotes CreditNote[]
   customerContacts CustomerContact[]
   contracts Contract[]
-//   deals Deal[]
+  deals Deal[]
   activities Activity[]
   quotations Quotation[]
   salesOrders SalesOrder[]
@@ -800,7 +800,7 @@ model CustomerContact {
   @@index([businessId])
   @@index([contactOwnerId])
   @@index([isDeleted])
-//   deals Deal[]
+  deals Deal[]
   activities Activity[]
   notes      Note[]
   emailLogs  EmailLog[]
@@ -878,8 +878,8 @@ assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
   stageId         String?
   stage           PipelineStage? @relation(fields: [stageId], references: [id])
 
-  activities      LeadActivity[]
-  notes           LeadNote[]
+  leadActivities  LeadActivity[]
+  leadNotes       LeadNote[]
   tasks           LeadTask[]
   reminders       LeadReminder[]
 
@@ -897,8 +897,8 @@ assignedTo   BusinessUser? @relation(fields: [assignedToId], references: [id])
 
   customers Customer[]
 
-  activity Activity[]
-  crmNotes      Note[]
+  activities    Activity[]
+  notes         Note[]
   emailLogs     EmailLog[]
   crmTasks      CrmTask[]
   conversionLog LeadConversionLog?
@@ -965,7 +965,9 @@ model Deal {
   /// ///////////////////////////////////////////////////
   /// ///////////////////////////////////////////////////
   customerId        String
+  customer          Customer           @relation(fields: [customerId], references: [id])
   contactId         String?
+  contact           CustomerContact?   @relation(fields: [contactId], references: [id])
   /// ///////////////////////////////////////////////////
   /// ///////////////////////////////////////////////////
   stage             String             @default("New")
