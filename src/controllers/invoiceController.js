@@ -194,11 +194,13 @@ exports.createInvoice = async (req, res) => {
       console.error("PDF generation error:", pdfErr);
     }
 
-    res.status(201).json({ success: true, data: invoice });
-
-  } catch (err) {
-    console.error("createInvoice error:", err);
-    res.status(500).json({ success: false, message: err.message });
+    return successResponse(res, invoice, "Invoice created successfully", 201);
+  } catch (error) {
+    console.error("createInvoice controller error:", error);
+    if (error.name === "ZodError" && error.errors && error.errors.length) {
+      return errorResponse(res, error.errors[0].message, 400, error.errors);
+    }
+    return errorResponse(res, error.message || "Unexpected error", 400);
   }
 };
 

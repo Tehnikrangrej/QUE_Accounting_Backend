@@ -11,7 +11,7 @@ const reserveStock = async (tx, businessId, items) => {
     if (!item.productId) continue;
 
     if (!item.warehouseId) {
-      // Skip stock reservation for service items without a warehouse
+      // Skip stock reservation for items without a warehouse (e.g. service items)
       continue;
     }
 
@@ -23,26 +23,20 @@ const reserveStock = async (tx, businessId, items) => {
     });
 
     if (!stockRecord) {
-      // Initialize stock record if it doesn't exist
+      // Optional: Initialize stock record if it doesn't exist
       await tx.stock.create({
         data: {
           productId: item.productId,
           warehouseId: item.warehouseId
         }
       });
-      continue;
     }
 
-    const available = stockRecord.quantity - stockRecord.reservedQty;
-    if (available < item.quantity) {
-      throw new Error(`Insufficient stock for product ID ${item.productId}. Available: ${available}, Requested: ${item.quantity}`);
-    }
-
-    await tx.stock.update({
-      where: { id: stockRecord.id },
-      data: {
-        reservedQty: { increment: item.quantity }
-      }
+    await reserveStockHelper(tx, {
+      businessId,
+      productId: item.productId,
+      warehouseId: item.warehouseId,
+      quantity: item.quantity
     });
   }
 };
@@ -54,22 +48,13 @@ const releaseStock = async (tx, businessId, items) => {
   for (const item of items) {
     if (!item.productId || !item.warehouseId) continue;
 
-    const stockRecord = await tx.stock.findFirst({
-      where: {
-        productId: item.productId,
-        warehouse: { businessId }
-      }
+    await releaseReservedStock(tx, {
+      businessId,
+      productId: item.productId,
+      warehouseId: item.warehouseId,
+      quantity: item.quantity
     });
 
-    if (stockRecord) {
-      const decrementQty = Math.min(stockRecord.reservedQty, item.quantity);
-      await tx.stock.update({
-        where: { id: stockRecord.id },
-        data: {
-          reservedQty: { decrement: decrementQty }
-        }
-      });
-    }
   }
 };
 

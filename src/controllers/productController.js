@@ -275,9 +275,6 @@ exports.searchProducts = async (req, res) => {
   }
 };
 
-//////////////////////////////////////////////////////
-// GET ALL PRODUCTS
-//////////////////////////////////////////////////////
 exports.getProducts = async (req, res) => {
   try {
     // Use service-layer if available (main branch), fallback to direct Prisma query
