@@ -225,9 +225,9 @@ exports.getCustomerById = async (req, res) => {
         customerContacts: { where: { isDeleted: false } },
         deals: { where: { isDeleted: false } },
         activities: { where: { isDeleted: false } },
-        Note: { where: { isDeleted: false }, orderBy: { createdAt: "desc" } },
-        EmailLog: { orderBy: { sentAt: "desc" } },
-        CrmTask: { where: { isDeleted: false } },
+        notes: { where: { isDeleted: false }, orderBy: { createdAt: "desc" } },
+        emailLogs: { orderBy: { sentAt: "desc" } },
+        crmTasks: { where: { isDeleted: false } },
       },
     });
 

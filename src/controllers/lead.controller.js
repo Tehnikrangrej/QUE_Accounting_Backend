@@ -183,7 +183,7 @@ exports.getLeadDetails = async (req, res) => {
         stage: true,
         campaign: true,
         activities: { orderBy: { createdAt: "desc" } },
-        crmNotes: { where: { isDeleted: false }, orderBy: { createdAt: "desc" } },
+        notes: { where: { isDeleted: false }, orderBy: { createdAt: "desc" } },
         emailLogs: { orderBy: { sentAt: "desc" } },
         assignedTo: { include: { user: true } },
         conversionLog: true,
@@ -408,9 +408,23 @@ exports.moveStage = async (req, res) => {
       });
     }
 
+    // Validate stageId if provided
+    if (stageId) {
+      const stage = await prisma.pipelineStage.findUnique({
+        where: { id: stageId },
+      });
+
+      if (!stage) {
+        return res.status(400).json({
+          success: false,
+          message: "Pipeline stage not found. Please create stages first from the pipeline settings.",
+        });
+      }
+    }
+
     const updatedLead = await prisma.lead.update({
       where: { id },
-      data: { stageId },
+      data: { stageId: stageId || null },
       include: { stage: true },
     });
 
@@ -501,6 +515,69 @@ exports.addReminder = async (req, res) => {
     });
 
     res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+//////////////////////////////////////////////////////
+// PIPELINE STAGE MANAGEMENT
+//////////////////////////////////////////////////////
+exports.getPipelineStages = async (req, res) => {
+  try {
+    const stages = await prisma.pipelineStage.findMany({
+      orderBy: { order: "asc" },
+    });
+    res.json({ success: true, data: stages });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.createPipelineStage = async (req, res) => {
+  try {
+    const { name, color, order } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: "Stage name is required" });
+
+    const count = await prisma.pipelineStage.count();
+    const stage = await prisma.pipelineStage.create({
+      data: {
+        name,
+        color: color || "#6366f1",
+        order: order !== undefined ? Number(order) : count + 1,
+      },
+    });
+    res.status(201).json({ success: true, data: stage });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.updatePipelineStage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, color, order } = req.body;
+    const stage = await prisma.pipelineStage.update({
+      where: { id },
+      data: {
+        ...(name && { name }),
+        ...(color && { color }),
+        ...(order !== undefined && { order: Number(order) }),
+      },
+    });
+    res.json({ success: true, data: stage });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.deletePipelineStage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Safely unassign leads before deleting the stage
+    await prisma.lead.updateMany({ where: { stageId: id }, data: { stageId: null } });
+    await prisma.pipelineStage.delete({ where: { id } });
+    res.json({ success: true, message: "Stage deleted successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

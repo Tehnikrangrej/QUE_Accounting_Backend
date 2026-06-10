@@ -32,4 +32,11 @@ router.post('/:id/note', authMiddleware,businessMiddleware,checkPermission("Lead
 router.post('/:id/task', authMiddleware,businessMiddleware,checkPermission("Leads","create"), leadController.addTask);
 
 router.post('/:id/reminder', authMiddleware,businessMiddleware,checkPermission("Leads","create"), leadController.addReminder);
+
+// PIPELINE STAGE MANAGEMENT
+router.get('/pipeline/stages', authMiddleware, businessMiddleware, leadController.getPipelineStages);
+router.post('/pipeline/stages', authMiddleware, businessMiddleware, checkPermission("Leads","create"), leadController.createPipelineStage);
+router.put('/pipeline/stages/:id', authMiddleware, businessMiddleware, checkPermission("Leads","update"), leadController.updatePipelineStage);
+router.delete('/pipeline/stages/:id', authMiddleware, businessMiddleware, checkPermission("Leads","delete"), leadController.deletePipelineStage);
+
 module.exports = router;
