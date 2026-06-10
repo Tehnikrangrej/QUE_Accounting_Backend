@@ -148,8 +148,6 @@ exports.createCustomer = async (req, res) => {
         crmStatus,
       },
       include: {
-        accountOwner: { include: { user: true } },
-        parentAccount: true,
       },
     });
 
@@ -190,8 +188,6 @@ exports.getCustomers = async (req, res) => {
         accountOwnerId: "accountOwnerId",
       },
       relations: {
-        accountOwner: { select: { id: true, user: { select: { name: true, email: true } } } },
-        parentAccount: { select: { id: true, company: true } },
       },
     });
 
@@ -226,13 +222,12 @@ exports.getCustomerById = async (req, res) => {
         isDeleted: false,
       },
       include: {
-        accountOwner: { include: { user: true } },
-        parentAccount: true,
-        childAccounts: true,
         customerContacts: { where: { isDeleted: false } },
         deals: { where: { isDeleted: false } },
         activities: { where: { isDeleted: false } },
-        notes: { where: { isDeleted: false } },
+        Note: { where: { isDeleted: false }, orderBy: { createdAt: "desc" } },
+        EmailLog: { orderBy: { sentAt: "desc" } },
+        CrmTask: { where: { isDeleted: false } },
       },
     });
 
@@ -347,8 +342,6 @@ exports.updateCustomer = async (req, res) => {
       where: { id },
       data: updatedData,
       include: {
-        accountOwner: { include: { user: true } },
-        parentAccount: true,
       },
     });
 

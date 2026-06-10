@@ -59,18 +59,18 @@ model Business {
 //   timeEntries         TimeEntry[]
   vendors             Vendor[]
   warehouses          Warehouse[]
-//   audit_logs          audit_logs[]
-//   batches             batches[]
-//   brands              brands[]
+//  audit_logs          audit_logs[]
+//  batches             batches[]
+//  brands              brands[]
   users               BusinessUser[]
   owner               User                  @relation("BusinessOwner", fields: [ownerId], references: [id])
-//   categories          categories[]
+//  categories          categories[]
   customers           Customer[]
-//   goods_receive_notes goods_receive_notes[]
+//  goods_receive_notes goods_receive_notes[]
   invoices            Invoice[]
-//   notifications       notifications[]
+//  notifications       notifications[]
   payments            Payment[]
-//   purchase_requests   purchase_requests[]
+//  purchase_requests   purchase_requests[]
 //   purchase_returns    purchase_returns[]
 //   recurring_invoices  recurring_invoices[]
   roles               Role[]
@@ -83,51 +83,32 @@ model Business {
 //   units               units[]
   activeUsers         User[]                @relation("ActiveBusiness")
 
+  // Phase2 relations
+  Note                Note[]
+  EmailLog            EmailLog[]
+  Campaign            Campaign[]
+  CrmTask             CrmTask[]
+  LeadConversionLog   LeadConversionLog[]
+  categories          Category[]
+  brands              Brand[]
+  units               Unit[]
+  batches             Batch[]
+  serialNumbers       SerialNumber[]
+  stockTransfers      StockTransfer[]
+  stockAdjustments    StockAdjustment[]
+  purchaseRequests    PurchaseRequest[]
+  goodsReceiveNotes   GoodsReceiveNote[]
+  purchaseReturns     PurchaseReturn[]
+  salesReturns        SalesReturn[]
+  recurringInvoices   RecurringInvoice[]
+  auditLogs           AuditLog[]
+  notifications       Notification[]
+  accounts            Account[]
+  products            Product[]
+  purchaseOrders      PurchaseOrder[]
+  timeEntries         TimeEntry[]
+
     @@map("businesses")
-    settings Settings[]
-    payments Payment[]
-    creditNotes CreditNote[]
-    employees Employee[]
-    overtimes Overtime[]
-    expenses Expense[]
-    customerContacts CustomerContact[]
-    contracts Contract[]
-    contractTypes ContractType[]
-    leads Lead[]
-    deals Deal[]
-    activities Activity[]
-    quotations Quotation[]
-    salesOrders SalesOrder[]
-    bills Bill[]
-    purchaseOrders PurchaseOrder[]
-    vendors Vendor[]
-    warehouses Warehouse[]
-//     products Product[]
-//     journalEntries JournalEntry[]
-//     accounts Account[]
-    salesReturns SalesReturn[]
-    recurringInvoices RecurringInvoice[]
-    auditLogs AuditLog[]
-    notifications Notification[]
-    categories Category[]
-    brands Brand[]
-    units Unit[]
-    stockMovements StockMovement[]
-    batches Batch[]
-    serialNumbers SerialNumber[]
-    stockTransfers StockTransfer[]
-    stockAdjustments StockAdjustment[]
-    purchaseRequests PurchaseRequest[]
-    goodsReceiveNotes GoodsReceiveNote[]
-    purchaseReturns PurchaseReturn[]
-    
-//     timeEntries TimeEntry[]
-//     projects Project[]
-    notes Note[]
-    emailLogs EmailLog[]
-    campaigns Campaign[]
-    crmTasks CrmTask[]
-    leadConversionLogs LeadConversionLog[]
 }
 
   //////////////////////////////////////////////////////
@@ -142,45 +123,35 @@ model BusinessUser {
   isActive                                     Boolean             @default(true)
   createdAt                                    DateTime            @default(now())
 //   activities                                   Activity[]
-  CrmTask_CrmTask_assignedToIdTobusiness_users CrmTask[]           @relation("CrmTask_assignedToIdTobusiness_users")
-  CrmTask_CrmTask_createdByIdTobusiness_users  CrmTask[]           @relation("CrmTask_createdByIdTobusiness_users")
-  CustomerContact                              CustomerContact[]
+//   CrmTask relations removed (use crmTasksAssigned/crmTasksCreated below)
+//   CustomerContact moved to contactOwner below
 //   deals                                        Deal[]
 //   leads                                        Lead[]
-  LeadConversionLog                            LeadConversionLog[]
-  Note                                         Note[]
-//   projectMembers                               ProjectMember[]
-  PurchaseOrder                                PurchaseOrder[]
-//   quotations                                   Quotation[]
-//   salesOrders                                  SalesOrder[]
-//   taskAssignees                                TaskAssignee[]
-//   timeEntries                                  TimeEntry[]
   business                                     Business            @relation(fields: [businessId], references: [id])
   role                                         Role                @relation(fields: [roleId], references: [id])
   user                                         User                @relation(fields: [userId], references: [id])
-  customers                                    Customer[]
-//   purchase_requests                            purchase_requests[]
   userPermissions                              UserPermission[]
 
-    @@unique([userId, businessId]) // prevents duplicate membership
+  // Phase2 CRM back-relations
+  customerOwner       Customer[]          @relation("CustomerOwner")
+  contactOwner        CustomerContact[]   @relation("ContactOwner")
+  createdNotes        Note[]              @relation("NoteCreatedBy")
+  crmTasksAssigned    CrmTask[]           @relation("CrmTaskAssignedTo")
+  crmTasksCreated     CrmTask[]           @relation("CrmTaskCreatedBy")
+  leadConversionLogs  LeadConversionLog[]
+  purchaseRequests    PurchaseRequest[]
+  // assignedTo back-relations
+  leads               Lead[]
+  deals               Deal[]
+  activities          Activity[]
+  quotations          Quotation[]
+  salesOrders         SalesOrder[]
+  purchaseOrders      PurchaseOrder[]
+  timeEntries         TimeEntry[]
+
+    @@unique([userId, businessId])
     @@index([businessId])
     @@map("business_users")
-//       deals Deal[]
-//     leads Lead[]
-//     activities Activity[]
-//     quotations Quotation[]
-//     salesOrders SalesOrder[]
-    purchaseOrders PurchaseOrder[]
-//     projectMembers ProjectMember[]
-//     taskAssignees TaskAssignee[]
-//     timeEntries TimeEntry[]
-    customerOwner Customer[] @relation("CustomerOwner")
-    contactOwner CustomerContact[] @relation("ContactOwner")
-    createdNotes Note[] @relation("NoteCreatedBy")
-    crmTasksAssigned CrmTask[] @relation("CrmTaskAssignedTo")
-    crmTasksCreated CrmTask[] @relation("CrmTaskCreatedBy")
-    leadConversionLogs LeadConversionLog[]
-    purchaseRequests PurchaseRequest[]
 }
 
   //////////////////////////////////////////////////////
@@ -374,6 +345,20 @@ model Customer {
     adminNote String?
     terms    String?
 
+    // Regional Taxation & Shipping Fields
+    reverseCharge    Boolean?  @default(false)
+    shippingCharges  Float     @default(0)
+    cgst             Float?    @default(0)
+    sgst             Float?    @default(0)
+    igst             Float?    @default(0)
+    tds              Float?    @default(0)
+    vatAmount        Float?    @default(0)
+    vatPercentage    Float?    @default(0)
+    vatType          String?
+    emirate          String?
+    ewayBillNo       String?
+    transportDetails String?
+
     //totalAmount//
     subtotal Float @default(0)
     totalTax Float @default(0) 
@@ -427,8 +412,14 @@ salesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id])
     description String
     hsnSacCode  String?
     itemType    String?
-    hours Float
-    rate Float
+    unit        String?
+    quantity    Float     @default(1)
+    hours       Float
+    rate        Float
+    taxPercent  Float?    @default(0)
+    cgstPercent Float?    @default(0)
+    sgstPercent Float?    @default(0)
+    igstPercent Float?    @default(0)
     taxDetails  Json?
      // 🔥 ADD THESE (IMPORTANT)
   totalTax    Float   @default(0)
@@ -965,6 +956,7 @@ model Deal {
   /// ///////////////////////////////////////////////////
   /// ///////////////////////////////////////////////////
   businessId        String
+  business          Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
   /// ///////////////////////////////////////////////////
   /// ///////////////////////////////////////////////////
   name              String
@@ -1122,6 +1114,20 @@ model Quotation {
   
   currency         String          @default("INR")
   termsConditions  String?
+  
+  // Regional Taxation & Shipping Fields
+  reverseCharge    Boolean?        @default(false)
+  shippingCharges  Float           @default(0)
+  cgst             Float?          @default(0)
+  sgst             Float?          @default(0)
+  igst             Float?          @default(0)
+  tds              Float?          @default(0)
+  vatAmount        Float?          @default(0)
+  vatPercentage    Float?          @default(0)
+  vatType          String?
+  emirate          String?
+  ewayBillNo       String?
+  transportDetails String?
   issueDate        DateTime        @default(now())
   expiryDate       DateTime?
   notes            String?
@@ -1154,8 +1160,12 @@ model QuotationItem {
   itemType     String?   @default("GOODS")
   hsnSacCode   String?
   quantity     Float
+  unit         String?
   price        Float
   taxPercent   Float?    @default(0)
+  cgstPercent  Float?    @default(0)
+  sgstPercent  Float?    @default(0)
+  igstPercent  Float?    @default(0)
   taxDetails   Json?
   discount     Float?    @default(0)
   total        Float
@@ -1194,6 +1204,25 @@ model SalesOrder {
   
   currency         String           @default("INR")
   termsConditions  String?
+  
+  // Regional Taxation & Shipping Fields
+  reverseCharge    Boolean?         @default(false)
+  shippingCharges  Float            @default(0)
+  cgst             Float?           @default(0)
+  sgst             Float?           @default(0)
+  igst             Float?           @default(0)
+  tds              Float?           @default(0)
+  vatAmount        Float?           @default(0)
+  vatPercentage    Float?           @default(0)
+  vatType          String?
+  emirate          String?
+  ewayBillNo       String?
+  transportDetails String?
+  customerReference String?
+  deliveryInstructions String?
+  paymentTerms     String?
+  shippingMethod   String?
+  placeOfSupply    String?
   orderDate        DateTime         @default(now())
   deliveryDate     DateTime?
   notes            String?
@@ -1229,8 +1258,12 @@ model SalesOrderItem {
   itemType     String?    @default("GOODS")
   hsnSacCode   String?
   quantity     Float
+  unit         String?
   price        Float
   taxPercent   Float?     @default(0)
+  cgstPercent  Float?     @default(0)
+  sgstPercent  Float?     @default(0)
+  igstPercent  Float?     @default(0)
   taxDetails   Json?
   discount     Float?     @default(0)
   total        Float
@@ -1982,6 +2015,7 @@ enum SalesOrderStatus {
   PROCESSING
   PARTIALLY_FULFILLED
   FULFILLED
+  INVOICED
   CANCELLED
 }
 
@@ -2232,6 +2266,10 @@ model StockMovement {
   referenceId   String?
   performedBy   String?
   notes         String?
+  balanceAfter  Float?
+  invoiceId     String?
+  referenceNo   String?
+  salesOrderId  String?
   createdAt     DateTime @default(now())
 
   business      Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)

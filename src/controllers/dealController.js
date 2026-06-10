@@ -131,7 +131,7 @@ exports.createDeal = async (req, res) => {
       include: {
         customer: true,
         contact: true,
-        campaign: true,
+        Campaign: true,
         assignedTo: { include: { user: true } },
       },
     });
@@ -185,7 +185,7 @@ exports.getDeals = async (req, res) => {
       relations: {
         customer: true,
         contact: true,
-        campaign: true,
+        Campaign: true,
         assignedTo: { include: { user: true } },
       },
     });
@@ -223,11 +223,11 @@ exports.getDealById = async (req, res) => {
       include: {
         customer: true,
         contact: true,
-        campaign: true,
-        stageHistory: { orderBy: { changedAt: "desc" } },
-        notes: { where: { isDeleted: false }, orderBy: { createdAt: "desc" } },
+        Campaign: true,
+        DealStageHistory: { orderBy: { changedAt: "desc" } },
+        Note: { where: { isDeleted: false }, orderBy: { createdAt: "desc" } },
         activities: { where: { isDeleted: false }, orderBy: { activityDate: "desc" } },
-        emailLogs: { orderBy: { sentAt: "desc" } },
+        EmailLog: { orderBy: { sentAt: "desc" } },
         assignedTo: { include: { user: true } },
       },
     });
@@ -346,7 +346,7 @@ exports.updateDeal = async (req, res) => {
       include: {
         customer: true,
         contact: true,
-        campaign: true,
+        Campaign: true,
         assignedTo: { include: { user: true } },
       },
     });
