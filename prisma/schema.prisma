@@ -32,55 +32,55 @@ model Business {
   ownerId             String
   isActive            Boolean               @default(true)
   createdAt           DateTime              @default(now())
-  accounts            Account[]
+//   accounts            Account[]
   activities          Activity[]
   bills               Bill[]
-  Campaign            Campaign[]
+//   Campaign            Campaign[]
   contracts           Contract[]
   contractTypes       ContractType[]
   creditNotes         CreditNote[]
-  CrmTask             CrmTask[]
+//   CrmTask             CrmTask[]
   customerContacts    CustomerContact[]
   deals               Deal[]
-  EmailLog            EmailLog[]
+//   EmailLog            EmailLog[]
   employees           Employee[]
   expenses            Expense[]
-  journalEntries      JournalEntry[]
+//   journalEntries      JournalEntry[]
   leads               Lead[]
-  LeadConversionLog   LeadConversionLog[]
-  Note                Note[]
+//   LeadConversionLog   LeadConversionLog[]
+//   Note                Note[]
   overtimes           Overtime[]
-  products            Product[]
-  projects            Project[]
-  PurchaseOrder       PurchaseOrder[]
+//   products            Product[]
+//   projects            Project[]
+//   PurchaseOrder       PurchaseOrder[]
   quotations          Quotation[]
   salesOrders         SalesOrder[]
   settings            Settings?
-  timeEntries         TimeEntry[]
+//   timeEntries         TimeEntry[]
   vendors             Vendor[]
   warehouses          Warehouse[]
-  audit_logs          audit_logs[]
-  batches             batches[]
-  brands              brands[]
+//   audit_logs          audit_logs[]
+//   batches             batches[]
+//   brands              brands[]
   users               BusinessUser[]
   owner               User                  @relation("BusinessOwner", fields: [ownerId], references: [id])
-  categories          categories[]
+//   categories          categories[]
   customers           Customer[]
-  goods_receive_notes goods_receive_notes[]
+//   goods_receive_notes goods_receive_notes[]
   invoices            Invoice[]
-  notifications       notifications[]
+//   notifications       notifications[]
   payments            Payment[]
-  purchase_requests   purchase_requests[]
-  purchase_returns    purchase_returns[]
-  recurring_invoices  recurring_invoices[]
+//   purchase_requests   purchase_requests[]
+//   purchase_returns    purchase_returns[]
+//   recurring_invoices  recurring_invoices[]
   roles               Role[]
-  sales_returns       sales_returns[]
-  serial_numbers      serial_numbers[]
-  stock_adjustments   stock_adjustments[]
+//   sales_returns       sales_returns[]
+//   serial_numbers      serial_numbers[]
+//   stock_adjustments   stock_adjustments[]
   stockMovements      StockMovement[]
-  stock_transfers     stock_transfers[]
+//   stock_transfers     stock_transfers[]
   subscription        Subscription?
-  units               units[]
+//   units               units[]
   activeUsers         User[]                @relation("ActiveBusiness")
 
     @@map("businesses")
@@ -102,9 +102,9 @@ model Business {
     purchaseOrders PurchaseOrder[]
     vendors Vendor[]
     warehouses Warehouse[]
-    products Product[]
-    journalEntries JournalEntry[]
-    accounts Account[]
+//     products Product[]
+//     journalEntries JournalEntry[]
+//     accounts Account[]
     salesReturns SalesReturn[]
     recurringInvoices RecurringInvoice[]
     auditLogs AuditLog[]
@@ -121,8 +121,8 @@ model Business {
     goodsReceiveNotes GoodsReceiveNote[]
     purchaseReturns PurchaseReturn[]
     
-    timeEntries TimeEntry[]
-    projects Project[]
+//     timeEntries TimeEntry[]
+//     projects Project[]
     notes Note[]
     emailLogs EmailLog[]
     campaigns Campaign[]
@@ -141,39 +141,39 @@ model BusinessUser {
   roleId                                       String
   isActive                                     Boolean             @default(true)
   createdAt                                    DateTime            @default(now())
-  activities                                   Activity[]
+//   activities                                   Activity[]
   CrmTask_CrmTask_assignedToIdTobusiness_users CrmTask[]           @relation("CrmTask_assignedToIdTobusiness_users")
   CrmTask_CrmTask_createdByIdTobusiness_users  CrmTask[]           @relation("CrmTask_createdByIdTobusiness_users")
   CustomerContact                              CustomerContact[]
-  deals                                        Deal[]
-  leads                                        Lead[]
+//   deals                                        Deal[]
+//   leads                                        Lead[]
   LeadConversionLog                            LeadConversionLog[]
   Note                                         Note[]
-  projectMembers                               ProjectMember[]
+//   projectMembers                               ProjectMember[]
   PurchaseOrder                                PurchaseOrder[]
-  quotations                                   Quotation[]
-  salesOrders                                  SalesOrder[]
-  taskAssignees                                TaskAssignee[]
-  timeEntries                                  TimeEntry[]
+//   quotations                                   Quotation[]
+//   salesOrders                                  SalesOrder[]
+//   taskAssignees                                TaskAssignee[]
+//   timeEntries                                  TimeEntry[]
   business                                     Business            @relation(fields: [businessId], references: [id])
   role                                         Role                @relation(fields: [roleId], references: [id])
   user                                         User                @relation(fields: [userId], references: [id])
   customers                                    Customer[]
-  purchase_requests                            purchase_requests[]
+//   purchase_requests                            purchase_requests[]
   userPermissions                              UserPermission[]
 
     @@unique([userId, businessId]) // prevents duplicate membership
     @@index([businessId])
     @@map("business_users")
-      deals Deal[]
-    leads Lead[]
-    activities Activity[]
-    quotations Quotation[]
-    salesOrders SalesOrder[]
+//       deals Deal[]
+//     leads Lead[]
+//     activities Activity[]
+//     quotations Quotation[]
+//     salesOrders SalesOrder[]
     purchaseOrders PurchaseOrder[]
-    projectMembers ProjectMember[]
-    taskAssignees TaskAssignee[]
-    timeEntries TimeEntry[]
+//     projectMembers ProjectMember[]
+//     taskAssignees TaskAssignee[]
+//     timeEntries TimeEntry[]
     customerOwner Customer[] @relation("CustomerOwner")
     contactOwner CustomerContact[] @relation("ContactOwner")
     createdNotes Note[] @relation("NoteCreatedBy")
@@ -336,11 +336,11 @@ model Customer {
   creditNotes CreditNote[]
   customerContacts CustomerContact[]
   contracts Contract[]
-  deals Deal[]
+//   deals Deal[]
   activities Activity[]
   quotations Quotation[]
   salesOrders SalesOrder[]
-  projects Project[]
+//   projects Project[]
   notes       Note[]
   emailLogs   EmailLog[]
   crmTasks    CrmTask[]
@@ -348,10 +348,9 @@ model Customer {
   salesReturns SalesReturn[]
   recurringInvoices RecurringInvoice[]
 }
-enum Region {
-  INDIA
-  UAE
-}
+// enum Region {
+//   INDIA
+//   UAE
 
   //////////////////////////////////////////////////////
   // INVOICES
@@ -401,7 +400,7 @@ salesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id])
     items    InvoiceItem[]
 
     projectId String?
-project   Project? @relation(fields: [projectId], references: [id])
+// project   Project? @relation(fields: [projectId], references: [id])
 
     isDeleted Boolean @default(false)
     deletedAt DateTime?
@@ -414,10 +413,9 @@ project   Project? @relation(fields: [projectId], references: [id])
       payments Payment[]
     creditNotes CreditNote[]
 }
-  enum CreatorType {
-    Admin
-    USER
-  }
+//   enum CreatorType {
+//     Admin
+//     USER
 
   //////////////////////////////////////////////////////
   // INVOICE ITEMS
@@ -450,18 +448,17 @@ project   Project? @relation(fields: [projectId], references: [id])
 
     @@map("invoice_items")
   }
-enum InvoiceStatus {
-  UNPAID
-  PARTIALLY_PAID
-  DRAFT
-  PENDING_APPROVAL
-  APPROVED
-  SENT
-  PARTIAL_PAID
-  PAID
-  OVERDUE
-  CANCELLED
-}
+// enum InvoiceStatus {
+//   UNPAID
+//   PARTIALLY_PAID
+//   DRAFT
+//   PENDING_APPROVAL
+//   APPROVED
+//   SENT
+//   PARTIAL_PAID
+//   PAID
+//   OVERDUE
+//   CANCELLED
   //////////////////////////////////////////////////////
   // SUBSCRIPTIONS (Manual Billing Ready)
   //////////////////////////////////////////////////////
@@ -531,12 +528,12 @@ model Payment {
   /// ///////////////////////////////////////////////////
   createdBy     String
   pdfUrl        String?
-  creditNoteId  String?
+//   creditNoteId  String?
   paymentNumber String
   billId        String?
   bill          Bill?       @relation(fields: [billId], references: [id])
   business      Business    @relation(fields: [businessId], references: [id])
-  creditNote    CreditNote? @relation(fields: [creditNoteId], references: [id])
+//   creditNote    CreditNote? @relation(fields: [creditNoteId], references: [id])
   invoice       Invoice?    @relation(fields: [invoiceId], references: [id])
 
   @@index([invoiceId])
@@ -608,8 +605,8 @@ model Employee {
   loans              Loan[]
   overtimes          Overtime[]
   payslips           Payslip[]
-  projectMembers     ProjectMember[]
-  taskAssignees      TaskAssignee[]
+//   projectMembers     ProjectMember[]
+//   taskAssignees      TaskAssignee[]
   timeEntries        TimeEntry[]
 }
 
@@ -812,7 +809,7 @@ model CustomerContact {
   @@index([businessId])
   @@index([contactOwnerId])
   @@index([isDeleted])
-  deals Deal[]
+//   deals Deal[]
   activities Activity[]
   notes      Note[]
   emailLogs  EmailLog[]
@@ -1395,11 +1392,10 @@ model BillItem {
   total     Float
 }
 
-enum BillStatus {
-  UNPAID
-  PARTIALLY_PAID
-  PAID
-}
+// enum BillStatus {
+//   UNPAID
+//   PARTIALLY_PAID
+//   PAID
 
 model Product {
   id            String   @id @default(uuid())
@@ -1463,10 +1459,9 @@ model Product {
   @@index([businessId])
 }
 
-enum ItemType {
-  GOODS
-  SERVICE
-}
+// enum ItemType {
+//   GOODS
+//   SERVICE
 
 model Warehouse {
   id         String   @id @default(uuid())
@@ -1535,54 +1530,51 @@ model Account {
   createdAt  DateTime @default(now())
 
   business   Business @relation(fields: [businessId], references: [id])
-  entries    JournalEntry[]
+//   entries    JournalEntry[]
 }
 
-model stock_transfer_items {
-  id              String          @id
-  stockTransferId String
-  productId       String
-  quantity        Float
-  batchNumber     String?
-  serialNumbers   String[]
-  Product         Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  stock_transfers stock_transfers @relation(fields: [stockTransferId], references: [id], onDelete: Cascade)
-}
+// model stock_transfer_items {
+//   id              String          @id
+//   stockTransferId String
+//   productId       String
+//   quantity        Float
+//   batchNumber     String?
+//   serialNumbers   String[]
+//   Product         Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+//   stock_transfers stock_transfers @relation(fields: [stockTransferId], references: [id], onDelete: Cascade)
 
-model stock_transfers {
-  id                                                   String                 @id
-  businessId                                           String
-  transferNumber                                       String
-  fromWarehouseId                                      String
-  toWarehouseId                                        String
-  status                                               StockTransferStatus    @default(PENDING)
-  transferDate                                         DateTime               @default(now())
-  notes                                                String?
-  createdAt                                            DateTime               @default(now())
-  updatedAt                                            DateTime               @updatedAt
-  stock_transfer_items                                 stock_transfer_items[]
-  businesses                                           Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  Warehouse_stock_transfers_fromWarehouseIdToWarehouse Warehouse              @relation("stock_transfers_fromWarehouseIdToWarehouse", fields: [fromWarehouseId], references: [id])
-  Warehouse_stock_transfers_toWarehouseIdToWarehouse   Warehouse              @relation("stock_transfers_toWarehouseIdToWarehouse", fields: [toWarehouseId], references: [id])
+// model stock_transfers {
+//   id                                                   String                 @id
+//   businessId                                           String
+//   transferNumber                                       String
+//   fromWarehouseId                                      String
+//   toWarehouseId                                        String
+//   status                                               StockTransferStatus    @default(PENDING)
+//   transferDate                                         DateTime               @default(now())
+//   notes                                                String?
+//   createdAt                                            DateTime               @default(now())
+//   updatedAt                                            DateTime               @updatedAt
+//   stock_transfer_items                                 stock_transfer_items[]
+//   businesses                                           Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+//   Warehouse_stock_transfers_fromWarehouseIdToWarehouse Warehouse              @relation("stock_transfers_fromWarehouseIdToWarehouse", fields: [fromWarehouseId], references: [id])
+//   Warehouse_stock_transfers_toWarehouseIdToWarehouse   Warehouse              @relation("stock_transfers_toWarehouseIdToWarehouse", fields: [toWarehouseId], references: [id])
+// 
+//   @@unique([businessId, transferNumber])
+//   @@index([businessId])
 
-  @@unique([businessId, transferNumber])
-  @@index([businessId])
-}
-
-model units {
-  id          String    @id
-  businessId  String
-  name        String
-  description String?
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  Product     Product[]
-  businesses  Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-
-  @@unique([businessId, name])
-  @@index([businessId])
-}
+// model units {
+//   id          String    @id
+//   businessId  String
+//   name        String
+//   description String?
+//   isActive    Boolean   @default(true)
+//   createdAt   DateTime  @default(now())
+//   updatedAt   DateTime  @updatedAt
+//   Product     Product[]
+//   businesses  Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+// 
+//   @@unique([businessId, name])
+//   @@index([businessId])
 
 enum UserRole {
   USER
@@ -1685,83 +1677,73 @@ enum ProjectStatus {
   ON_HOLD
 }
 
-enum TaskStatus {
-  TODO
-  IN_PROGRESS
-  DONE
-}
+// enum TaskStatus {
+//   TODO
+//   IN_PROGRESS
+//   DONE
 
-enum StockMovementType {
-  PURCHASE_IN
-  SALE_OUT
-  TRANSFER_IN
-  TRANSFER_OUT
-  ADJUSTMENT_IN
-  ADJUSTMENT_OUT
-  RETURN_IN
-  RETURN_OUT
-  OPENING_STOCK
-}
+// enum StockMovementType {
+//   PURCHASE_IN
+//   SALE_OUT
+//   TRANSFER_IN
+//   TRANSFER_OUT
+//   ADJUSTMENT_IN
+//   ADJUSTMENT_OUT
+//   RETURN_IN
+//   RETURN_OUT
+//   OPENING_STOCK
 
-enum AdjustmentItemType {
-  ADD
-  SUBTRACT
-}
+// enum AdjustmentItemType {
+//   ADD
+//   SUBTRACT
 
-enum BillingFrequency {
-  DAILY
-  WEEKLY
-  MONTHLY
-  YEARLY
-}
+// enum BillingFrequency {
+//   DAILY
+//   WEEKLY
+//   MONTHLY
+//   YEARLY
 
-enum CrmAccountType {
-  CUSTOMER
-  PARTNER
-  PROSPECT
-  RESELLER
-  VENDOR
-  OTHER
-}
+// enum CrmAccountType {
+//   CUSTOMER
+//   PARTNER
+//   PROSPECT
+//   RESELLER
+//   VENDOR
+//   OTHER
 
-enum CrmStatus {
-  ACTIVE
-  INACTIVE
-  LEAD
-  PROSPECT
-  CHURNED
-}
+// enum CrmStatus {
+//   ACTIVE
+//   INACTIVE
+//   LEAD
+//   PROSPECT
+//   CHURNED
 
-enum DealStatus {
-  OPEN
-  WON
-  LOST
-}
+// enum DealStatus {
+//   OPEN
+//   WON
+//   LOST
 
-enum GrnStatus {
-  RECEIVED
-  CANCELLED
-}
+// enum GrnStatus {
+//   RECEIVED
+//   CANCELLED
 
-enum PaymentMethod {
-  CASH
-  BANK_TRANSFER
-  UPI
-  CREDIT_CARD
-  DEBIT_CARD
-  CHEQUE
-  ONLINE
-}
+// enum PaymentMethod {
+//   CASH
+//   BANK_TRANSFER
+//   UPI
+//   CREDIT_CARD
+//   DEBIT_CARD
+//   CHEQUE
+//   ONLINE
 
-enum PurchaseOrderStatus {
-  DRAFT
-  PENDING_APPROVAL
-  APPROVED
-  SENT
-  PARTIAL_RECEIVED
-  FULLY_RECEIVED
-  CANCELLED
-}
+// enum PurchaseOrderStatus {
+//   DRAFT
+//   PENDING_APPROVAL
+//   APPROVED
+//   SENT
+//   PARTIAL_RECEIVED
+//   FULLY_RECEIVED
+//   CANCELLED
 
 enum TaskStatus {
   TODO
@@ -1784,8 +1766,8 @@ model TimeEntry {
 
   date        DateTime @default(now())
 
-  project     Project @relation(fields: [projectId], references: [id])
-  task        Task?   @relation(fields: [taskId], references: [id])
+//   project     Project @relation(fields: [projectId], references: [id])
+//   task        Task?   @relation(fields: [taskId], references: [id])
   business    Business @relation(fields: [businessId], references: [id])
 
   businessUser BusinessUser? @relation(fields: [businessUserId], references: [id])
@@ -2312,7 +2294,7 @@ model StockTransfer {
   transferNumber   String
   fromWarehouseId  String
   toWarehouseId    String
-  status           StockTransferStatus @default(PENDING)
+//   status           StockTransferStatus @default(PENDING)
   transferDate     DateTime @default(now())
   notes            String?
   createdAt        DateTime @default(now())
